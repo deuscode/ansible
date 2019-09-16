@@ -4,21 +4,13 @@
 # Copyright (c) 2014 Hewlett-Packard Development Company, L.P.
 # Copyright (c) 2013, Benno Joy <benno@ansible.com>
 # Copyright (c) 2013, John Dewey <john@dewey.ws>
-#
-# This module is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This software is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this software.  If not, see <http://www.gnu.org/licenses/>.
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
+
+
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
 
@@ -35,7 +27,8 @@ description:
 options:
    name:
      description:
-        - Name that has to be given to the instance
+        - Name that has to be given to the instance. It is also possible to
+          specify the ID of the instance instead of its name if I(state) is I(absent).
      required: true
    image:
      description:
@@ -51,13 +44,11 @@ options:
      description:
         - The name or id of the flavor in which the new instance has to be
           created. Mutually exclusive with flavor_ram
-     required: false
      default: 1
    flavor_ram:
      description:
         - The minimum amount of ram in MB that the flavor in which the new
           instance has to be created must have. Mutually exclusive with flavor.
-     required: false
      default: 1
    flavor_include:
      description:
@@ -68,21 +59,15 @@ options:
    key_name:
      description:
         - The key pair name to be used when creating a instance
-     required: false
-     default: None
    security_groups:
      description:
         - Names of the security groups to which the instance should be
           added. This may be a YAML list or a comma separated string.
-     required: false
-     default: None
    network:
      description:
         - Name or ID of a network to attach this instance to. A simpler
           version of the nics parameter, only one of network or nics should
           be supplied.
-     required: false
-     default: None
    nics:
      description:
         - A list of networks to which the instance's interface should
@@ -91,58 +76,53 @@ options:
         - 'Also this accepts a string containing a list of (net/port)-(id/name)
           Eg: nics: "net-id=uuid-1,port-name=myport"
           Only one of network or nics should be supplied.'
-     required: false
-     default: None
+     suboptions:
+       tag:
+         description:
+            - 'A "tag" for the specific port to be passed via metadata.
+              Eg: tag: test_tag'
+         version_added: '2.10'
    auto_ip:
      description:
         - Ensure instance has public ip however the cloud wants to do that
-     required: false
+     type: bool
      default: 'yes'
      aliases: ['auto_floating_ip', 'public_ip']
    floating_ips:
      description:
         - list of valid floating IPs that pre-exist to assign to this node
-     required: false
-     default: None
    floating_ip_pools:
      description:
         - Name of floating IP pool from which to choose a floating IP
-     required: false
-     default: None
    meta:
      description:
         - 'A list of key value pairs that should be provided as a metadata to
           the new instance or a string containing a list of key-value pairs.
           Eg:  meta: "key1=value1,key2=value2"'
-     required: false
-     default: None
    wait:
      description:
         - If the module should wait for the instance to be created.
-     required: false
+     type: bool
      default: 'yes'
    timeout:
      description:
         - The amount of time the module should wait for the instance to get
           into active state.
-     required: false
      default: 180
    config_drive:
      description:
         - Whether to boot the server with config drive enabled
-     required: false
+     type: bool
      default: 'no'
    userdata:
      description:
         - Opaque blob of data which is made available to the instance
-     required: false
-     default: None
    boot_from_volume:
      description:
         - Should the instance boot from a persistent volume created based on
-          the image given. Mututally exclusive with boot_volume.
-     required: false
-     default: false
+          the image given. Mutually exclusive with boot_volume.
+     type: bool
+     default: 'no'
    volume_size:
      description:
         - The size of the volume to create in GB if booting from volume based
@@ -151,23 +131,19 @@ options:
      description:
         - Volume name or id to use as the volume to boot from. Implies
           boot_from_volume. Mutually exclusive with image and boot_from_volume.
-     required: false
-     default: None
      aliases: ['root_volume']
    terminate_volume:
      description:
-        - If true, delete volume when deleting instance (if booted from volume)
-     default: false
+        - If C(yes), delete volume when deleting instance (if booted from volume)
+     type: bool
+     default: 'no'
    volumes:
      description:
        - A list of preexisting volumes names or ids to attach to the instance
-     required: false
      default: []
    scheduler_hints:
      description:
         - Arbitrary key/value pairs to the scheduler for custom use
-     required: false
-     default: None
      version_added: "2.1"
    state:
      description:
@@ -178,8 +154,8 @@ options:
      description:
        - When I(state) is absent and this option is true, any floating IP
          associated with the instance will be deleted along with the instance.
-     required: false
-     default: false
+     type: bool
+     default: 'no'
      version_added: "2.2"
    reuse_ips:
      description:
@@ -190,16 +166,15 @@ options:
          concurrent server creation, it is highly recommended to set this to
          false and to delete the floating ip associated with a server when
          the server is deleted using I(delete_fip).
-     required: false
-     default: true
+     type: bool
+     default: 'yes'
      version_added: "2.2"
    availability_zone:
      description:
        - Availability zone in which to create the server.
-     required: false
 requirements:
-    - "python >= 2.6"
-    - "shade"
+    - "python >= 2.7"
+    - "openstacksdk"
 '''
 
 EXAMPLES = '''
@@ -207,7 +182,7 @@ EXAMPLES = '''
   os_server:
        state: present
        auth:
-         auth_url: https://region-b.geo-1.identity.hpcloudsvc.com:35357/v2.0/
+         auth_url: https://identity.example.com
          username: admin
          password: admin
          project_name: admin
@@ -232,7 +207,7 @@ EXAMPLES = '''
       os_server:
         state: present
         auth:
-          auth_url: https://region-b.geo-1.identity.hpcloudsvc.com:35357/v2.0/
+          auth_url: https://identity.example.com
           username: username
           password: Equality7-2521
           project_name: username-project1
@@ -299,7 +274,7 @@ EXAMPLES = '''
     - name: launch an instance with a string
       os_server:
         auth:
-           auth_url: https://region-b.geo-1.identity.hpcloudsvc.com:35357/v2.0/
+           auth_url: https://identity.example.com
            username: admin
            password: admin
            project_name: admin
@@ -314,7 +289,7 @@ EXAMPLES = '''
   os_server:
        state: present
        auth:
-         auth_url: https://region-b.geo-1.identity.hpcloudsvc.com:35357/v2.0/
+         auth_url: https://identity.example.com
          username: admin
          password: admin
          project_name: admin
@@ -332,7 +307,7 @@ EXAMPLES = '''
   os_server:
     state: present
     auth:
-      auth_url: https://region-b.geo-1.identity.hpcloudsvc.com:35357/v2.0/
+      auth_url: https://identity.example.com
       username: admin
       password: admin
       project_name: admin
@@ -413,18 +388,57 @@ EXAMPLES = '''
           ifdown eth0 && ifup eth0
           {% endraw %}
 
+# Create a new instance with server group for (anti-)affinity
+# server group ID is returned from os_server_group module.
+- name: launch a compute instance
+  hosts: localhost
+  tasks:
+    - name: launch an instance
+      os_server:
+        state: present
+        name: vm1
+        image: 4f905f38-e52a-43d2-b6ec-754a13ffb529
+        flavor: 4
+        scheduler_hints:
+          group: f5c8c61a-9230-400a-8ed2-3b023c190a7f
+
+# Create an instance with "tags" for the nic
+- name: Create instance with nics "tags"
+  os_server:
+    state: present
+    auth:
+        auth_url: https://identity.example.com
+        username: admin
+        password: admin
+        project_name: admin
+    name: vm1
+    image: 4f905f38-e52a-43d2-b6ec-754a13ffb529
+    key_name: ansible_key
+    flavor: 4
+    nics:
+      - port-name: net1_port1
+        tag: test_tag
+      - net-name: another_network
+
+# Deletes an instance via its ID
+- name: remove an instance
+  hosts: localhost
+  tasks:
+    - name: remove an instance
+      os_server:
+        name: abcdef01-2345-6789-0abc-def0123456789
+        state: absent
+
 '''
 
-try:
-    import shade
-    from shade import meta
-    HAS_SHADE = True
-except ImportError:
-    HAS_SHADE = False
+from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils.openstack import (
+    openstack_find_nova_addresses, openstack_cloud_from_module,
+    openstack_full_argument_spec, openstack_module_kwargs)
 
 
 def _exit_hostvars(module, cloud, server, changed=True):
-    hostvars = meta.get_hostvars_from_server(cloud, server)
+    hostvars = cloud.get_openstack_vars(server)
     module.exit_json(
         changed=changed, server=server, id=server.id, openstack=hostvars)
 
@@ -437,6 +451,7 @@ def _parse_nics(nics):
         else:
             yield net
 
+
 def _network_args(module, cloud):
     args = []
     nics = module.params['nics']
@@ -444,7 +459,7 @@ def _network_args(module, cloud):
     if not isinstance(nics, list):
         module.fail_json(msg='The \'nics\' parameter must be a list.')
 
-    for net in _parse_nics(nics):
+    for num, net in enumerate(_parse_nics(nics)):
         if not isinstance(net, dict):
             module.fail_json(
                 msg='Each entry in the \'nics\' parameter must be a dict.')
@@ -457,7 +472,10 @@ def _network_args(module, cloud):
                 module.fail_json(
                     msg='Could not find network by net-name: %s' %
                     net['net-name'])
-            args.append({'net-id': by_name['id']})
+            resolved_net = net.copy()
+            del resolved_net['net-name']
+            resolved_net['net-id'] = by_name['id']
+            args.append(resolved_net)
         elif net.get('port-id'):
             args.append(net)
         elif net.get('port-name'):
@@ -466,7 +484,13 @@ def _network_args(module, cloud):
                 module.fail_json(
                     msg='Could not find port by port-name: %s' %
                     net['port-name'])
-            args.append({'port-id': by_name['id']})
+            resolved_net = net.copy()
+            del resolved_net['port-name']
+            resolved_net['port-id'] = by_name['id']
+            args.append(resolved_net)
+
+        if 'tag' in net:
+            args[num]['tag'] = net['tag']
     return args
 
 
@@ -571,10 +595,12 @@ def _update_server(module, cloud, server):
     return (changed, server)
 
 
-def _delete_floating_ip_list(cloud, server, extra_ips):
+def _detach_ip_list(cloud, server, extra_ips):
     for ip in extra_ips:
-        cloud.nova_client.servers.remove_floating_ip(
-            server=server.id, address=ip)
+        ip_id = cloud.get_floating_ip(
+            id=None, filters={'floating_ip_address': ip})
+        cloud.detach_ip_from_server(
+            server_id=server.id, floating_ip_id=ip_id)
 
 
 def _check_ips(module, cloud, server):
@@ -615,7 +641,7 @@ def _check_ips(module, cloud, server):
                 if ip not in floating_ips:
                     extra_ips.append(ip)
             if extra_ips:
-                _delete_floating_ip_list(cloud, server, extra_ips)
+                _detach_ip_list(cloud, server, extra_ips)
                 changed = True
     elif auto_ip:
         if server['interface_ip']:
@@ -646,11 +672,7 @@ def _check_security_groups(module, cloud, server):
         return changed, server
 
     module_security_groups = set(module.params['security_groups'])
-    # Workaround a bug in shade <= 1.20.0
-    if server.security_groups is not None:
-        server_security_groups = set(sg.name for sg in server.security_groups)
-    else:
-        server_security_groups = set()
+    server_security_groups = set(sg['name'] for sg in server.security_groups)
 
     add_sgs = module_security_groups - server_security_groups
     remove_sgs = server_security_groups - module_security_groups
@@ -672,8 +694,7 @@ def _get_server_state(module, cloud):
     if server and state == 'present':
         if server.status not in ('ACTIVE', 'SHUTOFF', 'PAUSED', 'SUSPENDED'):
             module.fail_json(
-                msg="The instance is available but not Active state: "
-                    + server.status)
+                msg="The instance is available but not Active state: " + server.status)
         (ip_changed, server) = _check_ips(module, cloud, server)
         (sg_changed, server) = _check_security_groups(module, cloud, server)
         (server_changed, server) = _update_server(module, cloud, server)
@@ -689,31 +710,31 @@ def _get_server_state(module, cloud):
 def main():
 
     argument_spec = openstack_full_argument_spec(
-        name                            = dict(required=True),
-        image                           = dict(default=None),
-        image_exclude                   = dict(default='(deprecated)'),
-        flavor                          = dict(default=None),
-        flavor_ram                      = dict(default=None, type='int'),
-        flavor_include                  = dict(default=None),
-        key_name                        = dict(default=None),
-        security_groups                 = dict(default=['default'], type='list'),
-        network                         = dict(default=None),
-        nics                            = dict(default=[], type='list'),
-        meta                            = dict(default=None, type='raw'),
-        userdata                        = dict(default=None, aliases=['user_data']),
-        config_drive                    = dict(default=False, type='bool'),
-        auto_ip                         = dict(default=True, type='bool', aliases=['auto_floating_ip', 'public_ip']),
-        floating_ips                    = dict(default=None, type='list'),
-        floating_ip_pools               = dict(default=None, type='list'),
-        volume_size                     = dict(default=False, type='int'),
-        boot_from_volume                = dict(default=False, type='bool'),
-        boot_volume                     = dict(default=None, aliases=['root_volume']),
-        terminate_volume                = dict(default=False, type='bool'),
-        volumes                         = dict(default=[], type='list'),
-        scheduler_hints                 = dict(default=None, type='dict'),
-        state                           = dict(default='present', choices=['absent', 'present']),
-        delete_fip                      = dict(default=False, type='bool'),
-        reuse_ips                       = dict(default=True, type='bool'),
+        name=dict(required=True),
+        image=dict(default=None),
+        image_exclude=dict(default='(deprecated)'),
+        flavor=dict(default=None),
+        flavor_ram=dict(default=None, type='int'),
+        flavor_include=dict(default=None),
+        key_name=dict(default=None),
+        security_groups=dict(default=['default'], type='list'),
+        network=dict(default=None),
+        nics=dict(default=[], type='list'),
+        meta=dict(default=None, type='raw'),
+        userdata=dict(default=None, aliases=['user_data']),
+        config_drive=dict(default=False, type='bool'),
+        auto_ip=dict(default=True, type='bool', aliases=['auto_floating_ip', 'public_ip']),
+        floating_ips=dict(default=None, type='list'),
+        floating_ip_pools=dict(default=None, type='list'),
+        volume_size=dict(default=False, type='int'),
+        boot_from_volume=dict(default=False, type='bool'),
+        boot_volume=dict(default=None, aliases=['root_volume']),
+        terminate_volume=dict(default=False, type='bool'),
+        volumes=dict(default=[], type='list'),
+        scheduler_hints=dict(default=None, type='dict'),
+        state=dict(default='present', choices=['absent', 'present']),
+        delete_fip=dict(default=False, type='bool'),
+        reuse_ips=dict(default=True, type='bool'),
     )
     module_kwargs = openstack_module_kwargs(
         mutually_exclusive=[
@@ -730,9 +751,6 @@ def main():
         ],
     )
     module = AnsibleModule(argument_spec, **module_kwargs)
-
-    if not HAS_SHADE:
-        module.fail_json(msg='shade is required for this module')
 
     state = module.params['state']
     image = module.params['image']
@@ -752,22 +770,17 @@ def main():
                     "if state == 'present'"
             )
 
+    sdk, cloud = openstack_cloud_from_module(module)
     try:
-        cloud_params = dict(module.params)
-        cloud_params.pop('userdata', None)
-        cloud = shade.openstack_cloud(**cloud_params)
-
         if state == 'present':
             _get_server_state(module, cloud)
             _create_server(module, cloud)
         elif state == 'absent':
             _get_server_state(module, cloud)
             _delete_server(module, cloud)
-    except shade.OpenStackCloudException as e:
+    except sdk.exceptions.OpenStackCloudException as e:
         module.fail_json(msg=str(e), extra_data=e.extra_data)
 
-# this is magic, see lib/ansible/module_common.py
-from ansible.module_utils.basic import *
-from ansible.module_utils.openstack import *
+
 if __name__ == '__main__':
     main()

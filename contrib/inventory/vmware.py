@@ -30,7 +30,6 @@ required if these options are specified using environment variables.
 
 from __future__ import print_function
 
-import collections
 import json
 import logging
 import optparse
@@ -38,9 +37,10 @@ import os
 import ssl
 import sys
 import time
-import ConfigParser
 
-from six import text_type, string_types
+from ansible.module_utils.common._collections_compat import MutableMapping
+from ansible.module_utils.six import integer_types, text_type, string_types
+from ansible.module_utils.six.moves import configparser
 
 # Disable logging message trigged by pSphere/suds.
 try:
@@ -64,7 +64,7 @@ from suds.sudsobject import Object as SudsObject
 class VMwareInventory(object):
 
     def __init__(self, guests_only=None):
-        self.config = ConfigParser.SafeConfigParser()
+        self.config = configparser.SafeConfigParser()
         if os.environ.get('VMWARE_INI', ''):
             config_files = [os.environ['VMWARE_INI']]
         else:
@@ -159,7 +159,7 @@ class VMwareInventory(object):
             if k.startswith('_'):
                 continue
             new_key = parent_key + sep + k if parent_key else k
-            if isinstance(v, collections.MutableMapping):
+            if isinstance(v, MutableMapping):
                 items.extend(self._flatten_dict(v, new_key, sep).items())
             elif isinstance(v, (list, tuple)):
                 if all([isinstance(x, string_types) for x in v]):
@@ -210,7 +210,7 @@ class VMwareInventory(object):
                 if obj_info != ():
                     l.append(obj_info)
             return l
-        elif isinstance(obj, (type(None), bool, int, long, float, string_types)):
+        elif isinstance(obj, (type(None), bool, float) + string_types + integer_types):
             return obj
         else:
             return ()
@@ -229,7 +229,7 @@ class VMwareInventory(object):
             except AttributeError:
                 host_info['%ss' % attr] = []
         for k, v in self._get_obj_info(host.summary, depth=0).items():
-            if isinstance(v, collections.MutableMapping):
+            if isinstance(v, MutableMapping):
                 for k2, v2 in v.items():
                     host_info[k2] = v2
             elif k != 'host':
@@ -265,7 +265,7 @@ class VMwareInventory(object):
         except AttributeError:
             vm_info['guestState'] = ''
         for k, v in self._get_obj_info(vm.summary, depth=0).items():
-            if isinstance(v, collections.MutableMapping):
+            if isinstance(v, MutableMapping):
                 for k2, v2 in v.items():
                     if k2 == 'host':
                         k2 = 'hostSystem'

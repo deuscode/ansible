@@ -2,24 +2,13 @@
 # -*- coding: utf-8 -*-
 
 # (c) 2013, 2014, Jan-Piet Mens <jpmens () gmail.com>
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
-#
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
+
+
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
 
@@ -35,42 +24,34 @@ options:
   server:
     description:
       - MQTT broker address/name
-    required: false
     default: localhost
   port:
     description:
       - MQTT broker port number
-    required: false
     default: 1883
   username:
     description:
       - Username to authenticate against the broker.
-    required: false
   password:
     description:
       - Password for C(username) to authenticate against the broker.
-    required: false
   client_id:
     description:
       - MQTT client identifier
-    required: false
     default: hostname + pid
   topic:
     description:
       - MQTT topic name
     required: true
-    default: null
   payload:
     description:
       - Payload. The special string C("None") may be used to send a NULL
         (i.e. empty) payload which is useful to simply notify with the I(topic)
         or to clear previously retained messages.
     required: true
-    default: null
   qos:
     description:
       - QoS (Quality of Service)
-    required: false
     default: 0
     choices: [ "0", "1", "2" ]
   retain:
@@ -78,9 +59,9 @@ options:
       - Setting this flag causes the broker to retain (i.e. keep) the message so that
         applications that subsequently subscribe to the topic can received the last
         retained message immediately.
-    required: false
-    default: False
-  ca_certs:
+    type: bool
+    default: 'no'
+  ca_cert:
     description:
       - The path to the Certificate Authority certificate files that are to be
         treated as trusted by this client. If this is the only option given
@@ -90,32 +71,36 @@ options:
         but will not attempt any form of authentication. This provides basic
         network encryption but may not be sufficient depending on how the broker
         is configured.
-    required: False
-    default: None
     version_added: 2.3
-  certfile:
+    aliases: [ ca_certs ]
+  client_cert:
     description:
       - The path pointing to the PEM encoded client certificate. If this is not
         None it will be used as client information for TLS based
         authentication. Support for this feature is broker dependent.
-    required: False
-    default: None
     version_added: 2.3
-  keyfile:
+    aliases: [ certfile ]
+  client_key:
     description:
       - The path pointing to the PEM encoded client private key. If this is not
         None it will be used as client information for TLS based
         authentication. Support for this feature is broker dependent.
-    required: False
-    default: None
     version_added: 2.3
-
-
-# informational: requirements for nodes
+    aliases: [ keyfile ]
+  tls_version:
+    description:
+      - Specifies the version of the SSL/TLS protocol to be used.
+      - By default (if the python version supports it) the highest TLS version is
+        detected. If unavailable, TLS v1 is used.
+    type: str
+    choices:
+      - tlsv1.1
+      - tlsv1.2
+    version_added: 2.9
 requirements: [ mosquitto ]
 notes:
  - This module requires a connection to an MQTT broker such as Mosquitto
-   U(http://mosquitto.org) and the I(Paho) C(mqtt) Python client (U(https://pypi.python.org/pypi/paho-mqtt)).
+   U(http://mosquitto.org) and the I(Paho) C(mqtt) Python client (U(https://pypi.org/project/paho-mqtt/)).
 author: "Jan-Piet Mens (@jpmens)"
 '''
 
@@ -133,52 +118,70 @@ EXAMPLES = '''
 # MQTT module support methods.
 #
 
+import os
+import ssl
+import traceback
+import platform
+from distutils.version import LooseVersion
+
 HAS_PAHOMQTT = True
+PAHOMQTT_IMP_ERR = None
 try:
     import socket
     import paho.mqtt.publish as mqtt
 except ImportError:
+    PAHOMQTT_IMP_ERR = traceback.format_exc()
     HAS_PAHOMQTT = False
+
+from ansible.module_utils.basic import AnsibleModule, missing_required_lib
+from ansible.module_utils._text import to_native
+
 
 # ===========================================
 # Main
 #
 
 def main():
+    tls_map = {
+        'tlsv1.2': ssl.PROTOCOL_TLSv1_2,
+        'tlsv1.1': ssl.PROTOCOL_TLSv1_1,
+    }
 
     module = AnsibleModule(
         argument_spec=dict(
-            server = dict(default = 'localhost'),
-            port = dict(default = 1883, type='int'),
-            topic = dict(required = True),
-            payload = dict(required = True),
-            client_id = dict(default = None),
-            qos = dict(default="0", choices=["0", "1", "2"]),
-            retain = dict(default=False, type='bool'),
-            username = dict(default = None),
-            password = dict(default = None, no_log=True),
-            ca_certs = dict(default = None, type='path'),
-            certfile = dict(default = None, type='path'),
-            keyfile = dict(default = None, type='path'),
+            server=dict(default='localhost'),
+            port=dict(default=1883, type='int'),
+            topic=dict(required=True),
+            payload=dict(required=True),
+            client_id=dict(default=None),
+            qos=dict(default="0", choices=["0", "1", "2"]),
+            retain=dict(default=False, type='bool'),
+            username=dict(default=None),
+            password=dict(default=None, no_log=True),
+            ca_cert=dict(default=None, type='path', aliases=['ca_certs']),
+            client_cert=dict(default=None, type='path', aliases=['certfile']),
+            client_key=dict(default=None, type='path', aliases=['keyfile']),
+            tls_version=dict(default=None, choices=['tlsv1.1', 'tlsv1.2'])
         ),
         supports_check_mode=True
     )
 
     if not HAS_PAHOMQTT:
-        module.fail_json(msg="Paho MQTT is not installed")
+        module.fail_json(msg=missing_required_lib('paho-mqtt'), exception=PAHOMQTT_IMP_ERR)
 
-    server     = module.params.get("server", 'localhost')
-    port       = module.params.get("port", 1883)
-    topic      = module.params.get("topic")
-    payload    = module.params.get("payload")
-    client_id  = module.params.get("client_id", '')
-    qos        = int(module.params.get("qos", 0))
-    retain     = module.params.get("retain")
-    username   = module.params.get("username", None)
-    password   = module.params.get("password", None)
-    ca_certs   = module.params.get("ca_certs", None)
-    certfile   = module.params.get("certfile", None)
-    keyfile    = module.params.get("keyfile", None)
+    server = module.params.get("server", 'localhost')
+    port = module.params.get("port", 1883)
+    topic = module.params.get("topic")
+    payload = module.params.get("payload")
+    client_id = module.params.get("client_id", '')
+    qos = int(module.params.get("qos", 0))
+    retain = module.params.get("retain")
+    username = module.params.get("username", None)
+    password = module.params.get("password", None)
+    ca_certs = module.params.get("ca_cert", None)
+    certfile = module.params.get("client_cert", None)
+    keyfile = module.params.get("client_key", None)
+    tls_version = module.params.get("tls_version", None)
 
     if client_id is None:
         client_id = "%s_%s" % (socket.getfqdn(), os.getpid())
@@ -186,33 +189,51 @@ def main():
     if payload and payload == 'None':
         payload = None
 
-    auth=None
+    auth = None
     if username is not None:
-        auth = { 'username' : username, 'password' : password }
+        auth = {'username': username, 'password': password}
 
-    tls=None
+    tls = None
     if ca_certs is not None:
-        tls = {'ca_certs': ca_certs, 'certfile': certfile,
-               'keyfile': keyfile}
+        if tls_version:
+            tls_version = tls_map.get(tls_version, ssl.PROTOCOL_SSLv23)
+        else:
+            if LooseVersion(platform.python_version()) <= "3.5.2":
+                # Specifying `None` on later versions of python seems sufficient to
+                # instruct python to autonegotiate the SSL/TLS connection. On versions
+                # 3.5.2 and lower though we need to specify the version.
+                #
+                # Note that this is an alias for PROTOCOL_TLS, but PROTOCOL_TLS was
+                # not available until 3.5.3.
+                tls_version = ssl.PROTOCOL_SSLv23
+
+        tls = {
+            'ca_certs': ca_certs,
+            'certfile': certfile,
+            'keyfile': keyfile,
+            'tls_version': tls_version,
+        }
 
     try:
-        rc = mqtt.single(topic, payload,
-                    qos=qos,
-                    retain=retain,
-                    client_id=client_id,
-                    hostname=server,
-                    port=port,
-                    auth=auth,
-                    tls=tls)
-    except Exception:
-        e = get_exception()
-        module.fail_json(msg="unable to publish to MQTT broker %s" % (e))
+        mqtt.single(
+            topic,
+            payload,
+            qos=qos,
+            retain=retain,
+            client_id=client_id,
+            hostname=server,
+            port=port,
+            auth=auth,
+            tls=tls
+        )
+    except Exception as e:
+        module.fail_json(
+            msg="unable to publish to MQTT broker %s" % to_native(e),
+            exception=traceback.format_exc()
+        )
 
     module.exit_json(changed=False, topic=topic)
 
-# import module snippets
-from ansible.module_utils.basic import *
-from ansible.module_utils.pycompat24 import get_exception
 
 if __name__ == '__main__':
     main()

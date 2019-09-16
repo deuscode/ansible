@@ -81,17 +81,14 @@ import sys
 import argparse
 from time import time
 
-try:
-    import json
-except ImportError:
-    import simplejson as json
+import json
 
 try:
     from chube import load_chube_config
     from chube import api as chube_api
     from chube.datacenter import Datacenter
     from chube.linode_obj import Linode
-except:
+except Exception:
     try:
         # remove local paths and other stuff that may
         # cause an import conflict, as chube is sensitive
@@ -111,14 +108,17 @@ except:
 load_chube_config()
 
 # Imports for ansible
-import ConfigParser
+from ansible.module_utils.six.moves import configparser as ConfigParser
 
 
 class LinodeInventory(object):
+    def _empty_inventory(self):
+        return {"_meta": {"hostvars": {}}}
+
     def __init__(self):
         """Main execution path."""
         # Inventory grouped by display group
-        self.inventory = {}
+        self.inventory = self._empty_inventory()
         # Index of label to Linode ID
         self.index = {}
         # Local cache of Datacenter objects populated by populate_datacenter_cache()
@@ -139,7 +139,7 @@ class LinodeInventory(object):
             data_to_print = self.get_host_info()
         elif self.args.list:
             # Display list of nodes for inventory
-            if len(self.inventory) == 0:
+            if len(self.inventory) == 1:
                 data_to_print = self.get_inventory_from_cache()
             else:
                 data_to_print = self.json_format_dict(self.inventory, True)
@@ -232,8 +232,14 @@ class LinodeInventory(object):
         # Inventory: Group by datacenter city
         self.push(self.inventory, self.get_datacenter_city(node), dest)
 
-        # Inventory: Group by dipslay group
+        # Inventory: Group by display group
         self.push(self.inventory, node.display_group, dest)
+
+        # Inventory: Add a "linode" global tag group
+        self.push(self.inventory, "linode", dest)
+
+        # Add host info to hostvars
+        self.inventory["_meta"]["hostvars"][dest] = self._get_host_info(node)
 
     def get_node_public_ip(self, node):
         """Returns a the public IP address of the node"""
@@ -254,8 +260,11 @@ class LinodeInventory(object):
                 return self.json_format_dict({}, True)
 
         node_id = self.index[self.args.host]
-
         node = self.get_node(node_id)
+
+        return self.json_format_dict(self._get_host_info(node), True)
+
+    def _get_host_info(self, node):
         node_vars = {}
         for direct_attr in [
             "api_id",
@@ -296,7 +305,7 @@ class LinodeInventory(object):
         if private_ips:
             node_vars["private_ip"] = private_ips[0]
 
-        return self.json_format_dict(node_vars, True)
+        return node_vars
 
     def push(self, my_dict, key, element):
         """Pushed an element onto an array that may not have been defined in the dict."""
@@ -326,7 +335,7 @@ class LinodeInventory(object):
 
     def to_safe(self, word):
         """Escapes any characters that would be invalid in an ansible group name."""
-        return re.sub("[^A-Za-z0-9\-]", "_", word)
+        return re.sub(r"[^A-Za-z0-9\-]", "_", word)
 
     def json_format_dict(self, data, pretty=False):
         """Converts a dict to a JSON object and dumps it as a formatted string."""

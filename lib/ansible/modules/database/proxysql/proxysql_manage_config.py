@@ -1,20 +1,10 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+# Copyright: (c) 2017, Ansible Project
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
 
 DOCUMENTATION = '''
 ---
@@ -62,27 +52,8 @@ options:
                  config file.
     choices: [ "MEMORY", "DISK", "RUNTIME", "CONFIG" ]
     required: True
-  login_user:
-    description:
-      - The username used to authenticate to ProxySQL admin interface.
-    default: None
-  login_password:
-    description:
-      - The password used to authenticate to ProxySQL admin interface.
-    default: None
-  login_host:
-    description:
-      - The host used to connect to ProxySQL admin interface.
-    default: '127.0.0.1'
-  login_port:
-    description:
-      - The port used to connect to ProxySQL admin interface.
-    default: 6032
-  config_file:
-    description:
-      - Specify a config file from which login_user and login_password are to
-        be read.
-    default: ''
+extends_documentation_fragment:
+  - proxysql.connectivity
 '''
 
 EXAMPLES = '''
@@ -90,7 +61,7 @@ EXAMPLES = '''
 # This example saves the mysql users config from memory to disk. It uses
 # supplied credentials to connect to the proxysql admin interface.
 
-- proxysql_global_variables:
+- proxysql_manage_config:
     login_user: 'admin'
     login_password: 'admin'
     action: "SAVE"
@@ -101,7 +72,7 @@ EXAMPLES = '''
 # This example loads the mysql query rules config from memory to to runtime. It
 # uses supplied credentials to connect to the proxysql admin interface.
 
-- proxysql_global_variables:
+- proxysql_manage_config:
     config_file: '~/proxysql.cnf'
     action: "LOAD"
     config_settings: "MYSQL QUERY RULES"
@@ -119,21 +90,14 @@ stdout:
     }
 '''
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['stableinterface'],
                     'supported_by': 'community'}
 
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible.module_utils.mysql import mysql_connect
-from ansible.module_utils.pycompat24 import get_exception
-
-try:
-    import MySQLdb
-except ImportError:
-    MYSQLDB_FOUND = False
-else:
-    MYSQLDB_FOUND = True
+from ansible.module_utils.mysql import mysql_connect, mysql_driver, mysql_driver_fail_msg
+from ansible.module_utils._text import to_native
 
 # ===========================================
 # proxysql module specific support methods.
@@ -169,10 +133,8 @@ def perform_checks(module):
                           " with the CONFIG config_layer")
             module.fail_json(msg=msg_string % module.params["direction"])
 
-    if not MYSQLDB_FOUND:
-        module.fail_json(
-            msg="the python mysqldb module is required"
-        )
+    if mysql_driver is None:
+        module.fail_json(msg=mysql_driver_fail_msg)
 
 
 def manage_config(manage_config_settings, cursor):
@@ -230,10 +192,9 @@ def main():
                                login_user,
                                login_password,
                                config_file)
-    except MySQLdb.Error:
-        e = get_exception()
+    except mysql_driver.Error as e:
         module.fail_json(
-            msg="unable to connect to ProxySQL Admin Module.. %s" % e
+            msg="unable to connect to ProxySQL Admin Module.. %s" % to_native(e)
         )
 
     result = {}
@@ -244,13 +205,13 @@ def main():
     try:
         result['changed'] = manage_config(manage_config_settings,
                                           cursor)
-    except MySQLdb.Error:
-        e = get_exception()
+    except mysql_driver.Error as e:
         module.fail_json(
-            msg="unable to manage config.. %s" % e
+            msg="unable to manage config.. %s" % to_native(e)
         )
 
     module.exit_json(**result)
+
 
 if __name__ == '__main__':
     main()

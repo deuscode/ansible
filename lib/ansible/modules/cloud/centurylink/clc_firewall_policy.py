@@ -1,25 +1,13 @@
 #!/usr/bin/python
-
 #
 # Copyright (c) 2015 CenturyLink
-#
-# This file is part of Ansible.
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>
-#
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
+
+
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
 
@@ -28,7 +16,7 @@ DOCUMENTATION = '''
 module: clc_firewall_policy
 short_description: Create/delete/update firewall policies
 description:
-  - Create or delete or update firewall polices on Centurylink Cloud
+  - Create or delete or update firewall policies on Centurylink Cloud
 version_added: "2.0"
 options:
   location:
@@ -39,32 +27,23 @@ options:
     description:
       - Whether to create or delete the firewall policy
     default: present
-    required: False
     choices: ['present', 'absent']
   source:
     description:
       - The list  of source addresses for traffic on the originating firewall.
-        This is required when state is 'present"
-    default: None
-    required: False
+        This is required when state is 'present'
   destination:
     description:
       - The list of destination addresses for traffic on the terminating firewall.
         This is required when state is 'present'
-    default: None
-    required: False
   ports:
     description:
       - The list of ports associated with the policy.
         TCP and UDP can take in single ports or port ranges.
-    default: None
-    required: False
     choices: ['any', 'icmp', 'TCP/123', 'UDP/123', 'TCP/123-456', 'UDP/123-456']
   firewall_policy_id:
     description:
       - Id of the firewall policy. This is required to update or delete an existing firewall policy
-    default: None
-    required: False
   source_account_alias:
     description:
       - CLC alias for the source account
@@ -72,20 +51,16 @@ options:
   destination_account_alias:
     description:
       - CLC alias for the destination account
-    default: None
-    required: False
   wait:
     description:
       - Whether to wait for the provisioning tasks to finish before returning.
-    default: True
-    required: False
-    choices: [True, False]
+    type: bool
+    default: 'yes'
   enabled:
     description:
       - Whether the firewall policy is enabled or disabled
-    default: True
-    required: False
     choices: [True, False]
+    default: 'yes'
 requirements:
     - python = 2.7
     - requests >= 2.5.0
@@ -138,7 +113,7 @@ RETURN = '''
 firewall_policy_id:
     description: The fire wall policy id
     returned: success
-    type: string
+    type: str
     sample: fc36f1bfd47242e488a9c44346438c05
 firewall_policy:
     description: The fire wall policy information
@@ -177,26 +152,33 @@ firewall_policy:
 
 __version__ = '${version}'
 
-import urlparse
+import os
+import traceback
+from ansible.module_utils.six.moves.urllib.parse import urlparse
 from time import sleep
 from distutils.version import LooseVersion
 
+REQUESTS_IMP_ERR = None
 try:
     import requests
 except ImportError:
+    REQUESTS_IMP_ERR = traceback.format_exc()
     REQUESTS_FOUND = False
 else:
     REQUESTS_FOUND = True
 
+CLC_IMP_ERR = None
 try:
     import clc as clc_sdk
-    from clc import CLCException
     from clc import APIFailedResponse
 except ImportError:
+    CLC_IMP_ERR = traceback.format_exc()
     CLC_FOUND = False
     clc_sdk = None
 else:
     CLC_FOUND = True
+
+from ansible.module_utils.basic import AnsibleModule, missing_required_lib
 
 
 class ClcFirewallPolicy:
@@ -212,11 +194,9 @@ class ClcFirewallPolicy:
         self.firewall_dict = {}
 
         if not CLC_FOUND:
-            self.module.fail_json(
-                msg='clc-python-sdk required for this module')
+            self.module.fail_json(msg=missing_required_lib('clc-sdk'), exception=CLC_IMP_ERR)
         if not REQUESTS_FOUND:
-            self.module.fail_json(
-                msg='requests library is required for this module')
+            self.module.fail_json(msg=missing_required_lib('requests'), exception=REQUESTS_IMP_ERR)
         if requests.__version__ and LooseVersion(
                 requests.__version__) < LooseVersion('2.5.0'):
             self.module.fail_json(
@@ -298,7 +278,7 @@ class ClcFirewallPolicy:
         :return: policy_id: firewall policy id from creation call
         """
         url = response.get('links')[0]['href']
-        path = urlparse.urlparse(url).path
+        path = urlparse(url).path
         path_list = os.path.split(path)
         policy_id = path_list[-1]
         return policy_id
@@ -597,6 +577,6 @@ def main():
     clc_firewall = ClcFirewallPolicy(module)
     clc_firewall.process_request()
 
-from ansible.module_utils.basic import *  # pylint: disable=W0614
+
 if __name__ == '__main__':
     main()

@@ -2,23 +2,13 @@
 # -*- coding: utf-8 -*-
 
 # (c) 2017, Steven Bambling <smbambling@gmail.com>
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
+
+
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
 
@@ -26,7 +16,7 @@ DOCUMENTATION = '''
 ---
 module: sensu_silence
 version_added: "2.4"
-author: Steven Bambling(@smbambling)
+author: Steven Bambling (@smbambling)
 short_description: Manage Sensu silence entries
 description:
   - Create and clear (delete) a silence entries via the Sensu API
@@ -60,7 +50,7 @@ options:
   subscription:
     description:
       - Specifies the subscription which the silence entry applies to.
-      - To create a silence entry for a client append C(client:) to client name.
+      - To create a silence entry for a client prepend C(client:) to client name.
         Example - C(client:server1.example.dev)
     required: true
     default: []
@@ -105,13 +95,8 @@ EXAMPLES = '''
 RETURN = '''
 '''
 
+import json
 
-try:
-    import json
-except ImportError:
-    import simplejson as json
-
-# import module snippets
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.urls import fetch_url
 
@@ -145,7 +130,7 @@ def query(module, url, check, subscription):
 
     try:
         json_out = json.loads(response.read())
-    except:
+    except Exception:
         json_out = ""
 
     return False, json_out, False
@@ -197,7 +182,7 @@ def clear(module, url, check, subscription):
 
         try:
             json_out = json.loads(response.read())
-        except:
+        except Exception:
             json_out = ""
 
         return False, json_out, True
@@ -262,7 +247,7 @@ def create(
 
         try:
             json_out = json.loads(response.read())
-        except:
+        except Exception:
             json_out = ""
 
         return False, json_out, True
@@ -274,8 +259,8 @@ def main():
         argument_spec=dict(
             check=dict(required=False),
             creator=dict(required=False),
-            expire=dict(required=False),
-            expire_on_resolve=dict(type=bool, required=False),
+            expire=dict(type='int', required=False),
+            expire_on_resolve=dict(type='bool', required=False),
             reason=dict(required=False),
             state=dict(default='present', choices=['present', 'absent']),
             subscription=dict(required=True),

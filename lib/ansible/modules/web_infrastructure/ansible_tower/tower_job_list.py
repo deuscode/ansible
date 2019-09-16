@@ -2,21 +2,13 @@
 # coding: utf-8 -*-
 
 # (c) 2017, Wayne Witzel III <wayne@riotousliving.com>
-#
-# This module is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This software is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this software.  If not, see <http://www.gnu.org/licenses/>.
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
+
+
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
 
@@ -34,20 +26,18 @@ options:
     status:
       description:
         - Only list jobs with this status.
-      default: null
       choices: ['pending', 'waiting', 'running', 'error', 'failed', 'canceled', 'successful']
     page:
       description:
         - Page number of the results to fetch.
-      default: null
     all_pages:
       description:
         - Fetch all the pages and return a single result.
-      default: False
+      type: bool
+      default: 'no'
     query:
       description:
-        - Query used to further filter the list of jobs. {"foo":"bar"} will be passed at ?foo=bar
-      default: null
+        - Query used to further filter the list of jobs. C({"foo":"bar"}) will be passed at C(?foo=bar)
 extends_documentation_fragment: tower
 '''
 
@@ -57,8 +47,8 @@ EXAMPLES = '''
   tower_job_list:
     status: running
     query: {"playbook": "testing.yml"}
-    register: testing_jobs
     tower_config_file: "~/tower_cli.cfg"
+  register: testing_jobs
 '''
 
 RETURN = '''
@@ -88,40 +78,29 @@ results:
 '''
 
 
-from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils.ansible_tower import TowerModule, tower_auth_config, tower_check_mode
 
 try:
     import tower_cli
-    import tower_cli.utils.exceptions as exc
+    import tower_cli.exceptions as exc
 
     from tower_cli.conf import settings
-    from ansible.module_utils.ansible_tower import (
-        tower_auth_config,
-        tower_check_mode,
-        tower_argument_spec,
-    )
-
-    HAS_TOWER_CLI = True
 except ImportError:
-    HAS_TOWER_CLI = False
+    pass
 
 
 def main():
-    argument_spec = tower_argument_spec()
-    argument_spec.update(dict(
+    argument_spec = dict(
         status=dict(choices=['pending', 'waiting', 'running', 'error', 'failed', 'canceled', 'successful']),
         page=dict(type='int'),
         all_pages=dict(type='bool', default=False),
         query=dict(type='dict'),
-    ))
+    )
 
-    module = AnsibleModule(
+    module = TowerModule(
         argument_spec=argument_spec,
         supports_check_mode=True
     )
-
-    if not HAS_TOWER_CLI:
-        module.fail_json(msg='ansible-tower-cli required for this module')
 
     json_output = {}
 
@@ -139,7 +118,7 @@ def main():
             if query:
                 params['query'] = query.items()
             json_output = job.list(**params)
-        except (exc.ConnectionError, exc.BadRequest) as excinfo:
+        except (exc.ConnectionError, exc.BadRequest, exc.AuthError) as excinfo:
             module.fail_json(msg='Failed to list jobs: {0}'.format(excinfo), changed=False)
 
     module.exit_json(**json_output)

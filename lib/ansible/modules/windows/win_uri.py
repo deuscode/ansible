@@ -1,81 +1,109 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-# (c) 2015, Corwin Brown <corwin@corwinbrown.com>
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+# Copyright: (c) 2015, Corwin Brown <corwin@corwinbrown.com>
+# Copyright: (c) 2017, Dag Wieers (@dagwieers) <dag@wieers.com>
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-# this is a windows documentation stub.  actual code lives in the .ps1
-# file of the same name
-
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
-
 
 DOCUMENTATION = r'''
 ---
 module: win_uri
-version_added: "2.1"
-short_description: Interacts with webservices.
+version_added: '2.1'
+short_description: Interacts with webservices
 description:
-  - Interacts with HTTP and HTTPS web services and supports Digest, Basic and WSSE HTTP authentication mechanisms.
+- Interacts with FTP, HTTP and HTTPS web services.
+- Supports Digest, Basic and WSSE HTTP authentication mechanisms.
+- For non-Windows targets, use the M(uri) module instead.
 options:
   url:
     description:
-      - HTTP or HTTPS URL in the form of (http|https)://host.domain:port/path
-    required: True
+    - Supports FTP, HTTP or HTTPS URLs in the form of (ftp|http|https)://host.domain:port/path.
+    type: str
+    required: yes
   method:
     description:
-      - The HTTP Method of the request or response.
+    - The HTTP Method of the request or response.
+    type: str
     default: GET
-    choices:
-      - GET
-      - POST
-      - PUT
-      - HEAD
-      - DELETE
-      - OPTIONS
-      - PATCH
-      - TRACE
-      - CONNECT
-      - REFRESH
   content_type:
     description:
-      - Sets the "Content-Type" header.
+    - Sets the "Content-Type" header.
+    type: str
   body:
     description:
-      - The body of the HTTP request/response to the web service.
+    - The body of the HTTP request/response to the web service.
+    type: raw
   dest:
-    version_added: "2.3"
     description:
-      - Output the response body to a file.
-  headers:
+    - Output the response body to a file.
+    type: path
+    version_added: '2.3'
+  creates:
     description:
-      - 'Key Value pairs for headers. Example "Host: www.somesite.com"'
-  use_basic_parsing:
+    - A filename, when it already exists, this step will be skipped.
+    type: path
+    version_added: '2.4'
+  removes:
     description:
-      - This module relies upon 'Invoke-WebRequest', which by default uses the Internet Explorer Engine to parse a webpage. There's an edge-case where if a
-        user hasn't run IE before, this will fail. The only advantage to using the Internet Explorer praser is that you can traverse the DOM in a
-        powershell script. That isn't useful for Ansible, so by default we toggle 'UseBasicParsing'. However, you can toggle that off here.
-    choices:
-      - True
-      - False
-    default: True
-author: Corwin Brown (@blakfeld)
+    - A filename, when it does not exist, this step will be skipped.
+    type: path
+    version_added: '2.4'
+  return_content:
+    description:
+    - Whether or not to return the body of the response as a "content" key in
+      the dictionary result. If the reported Content-type is
+      "application/json", then the JSON is additionally loaded into a key
+      called C(json) in the dictionary results.
+    type: bool
+    default: no
+    version_added: '2.4'
+  status_code:
+    description:
+    - A valid, numeric, HTTP status code that signifies success of the request.
+    - Can also be comma separated list of status codes.
+    type: list
+    default: [ 200 ]
+    version_added: '2.4'
+  url_username:
+    description:
+    - The username to use for authentication.
+    - Was originally called I(user) but was changed to I(url_username) in
+      Ansible 2.9.
+    version_added: "2.4"
+  url_password:
+    description:
+    - The password for I(url_username).
+    - Was originally called I(password) but was changed to I(url_password) in
+      Ansible 2.9.
+    version_added: "2.4"
+  follow_redirects:
+    version_added: "2.4"
+  maximum_redirection:
+    version_added: "2.4"
+  client_cert:
+    version_added: "2.4"
+  client_cert_password:
+    version_added: "2.5"
+  use_proxy:
+    version_added: "2.9"
+  proxy_url:
+    version_added: "2.9"
+  proxy_username:
+    version_added: "2.9"
+  proxy_password:
+    version_added: "2.9"
+extends_documentation_fragment:
+- url_windows
+seealso:
+- module: uri
+- module: win_get_url
+author:
+- Corwin Brown (@blakfeld)
+- Dag Wieers (@dagwieers)
 '''
 
 EXAMPLES = r'''
@@ -105,54 +133,39 @@ EXAMPLES = r'''
 '''
 
 RETURN = r'''
+elapsed:
+  description: The number of seconds that elapsed while performing the download.
+  returned: always
+  type: float
+  sample: 23.2
 url:
-  description: The Target URL
+  description: The Target URL.
   returned: always
-  type: string
+  type: str
   sample: https://www.ansible.com
-method:
-  description: The HTTP method used.
-  returned: always
-  type: string
-  sample: GET
-content_type:
-  description: The "content-type" header used.
-  returned: always
-  type: string
-  sample: application/json
-use_basic_parsing:
-  description: The state of the "use_basic_parsing" flag.
-  returned: always
-  type: bool
-  sample: True
-body:
-  description: The content of the body used
-  returned: when body is specified
-  type: string
-  sample: '{"id":1}'
 status_code:
   description: The HTTP Status Code of the response.
   returned: success
   type: int
   sample: 200
 status_description:
-  description: A summery of the status.
+  description: A summary of the status.
   returned: success
-  type: string
+  type: str
   sample: OK
-raw_content:
+content:
   description: The raw content of the HTTP response.
-  returned: success
-  type: string
-  sample: 'HTTP/1.1 200 OK\nX-XSS-Protection: 1; mode=block\nAlternate-Protocol: 443:quic,p=1\nAlt-Svc: quic="www.google.com:443";'
-headers:
-  description: The Headers of the response.
-  returned: success
-  type: dict
-  sample: {"Content-Type": "application/json"}
-raw_content_length:
+  returned: success and return_content is True
+  type: str
+  sample: '{"foo": "bar"}'
+content_length:
   description: The byte size of the response.
   returned: success
   type: int
   sample: 54447
+json:
+  description: The json structure returned under content as a dictionary.
+  returned: success and Content-Type is "application/json" or "application/javascript" and return_content is True
+  type: dict
+  sample: {"this-is-dependent": "on the actual return content"}
 '''

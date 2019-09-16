@@ -35,17 +35,14 @@ import os
 import argparse
 import re
 from time import time
-import ConfigParser
 
-from six import iteritems, string_types
+from ansible.module_utils.six import iteritems, string_types
+from ansible.module_utils.six.moves import configparser as ConfigParser
 from libcloud.compute.types import Provider
 from libcloud.compute.providers import get_driver
 import libcloud.security as sec
 
-try:
-    import json
-except ImportError:
-    import simplejson as json
+import json
 
 
 class LibcloudInventory(object):
@@ -248,8 +245,7 @@ class LibcloudInventory(object):
 
         node = self.get_node(node_id)
         instance_vars = {}
-        for key in vars(instance):
-            value = getattr(instance, key)
+        for key, value in vars(node).items():
             key = self.to_safe('ec2_' + key)
 
             # Handle complex types
@@ -328,7 +324,7 @@ class LibcloudInventory(object):
         used as Ansible groups
         '''
 
-        return re.sub("[^A-Za-z0-9\-]", "_", word)
+        return re.sub(r"[^A-Za-z0-9\-]", "_", word)
 
     def json_format_dict(self, data, pretty=False):
         '''
@@ -344,6 +340,7 @@ class LibcloudInventory(object):
 
 def main():
     LibcloudInventory()
+
 
 if __name__ == '__main__':
     main()

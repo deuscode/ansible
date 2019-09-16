@@ -1,27 +1,15 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-# Ansible module to manage Big Cloud Fabric (versions 4.1) switches
-# (c) 2017, Ted Elhourani <ted@bigswitch.com>
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+# Copyright: (c) 2017, Ted Elhourani <ted@bigswitch.com>
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-ANSIBLE_METADATA = {'status': ['preview'],
-                    'supported_by': 'community',
-                    'metadata_version': '1.0'}
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
+
+ANSIBLE_METADATA = {'metadata_version': '1.1',
+                    'status': ['preview'],
+                    'supported_by': 'community'}
 
 DOCUMENTATION = '''
 ---
@@ -64,7 +52,7 @@ options:
         on personally controlled devices using self-signed certificates.
     required: false
     default: true
-    choices: [true, false]
+    type: bool
   access_token:
     description:
      - Big Cloud Fabric access token. If this isn't set then the environment variable C(BIGSWITCH_ACCESS_TOKEN) is used.
@@ -86,19 +74,19 @@ EXAMPLES = '''
 
 RETURN = ''' # '''
 
-
 import os
+import traceback
+
 from ansible.module_utils.basic import AnsibleModule
-from ansible.module_utils.bigswitch_utils import Rest, Response
-from ansible.module_utils.pycompat24 import get_exception
+from ansible.module_utils.network.bigswitch.bigswitch import Rest
+from ansible.module_utils._text import to_native
 
 
 def switch(module, check_mode):
     try:
         access_token = module.params['access_token'] or os.environ['BIGSWITCH_ACCESS_TOKEN']
-    except KeyError:
-        e = get_exception()
-        module.fail_json(msg='Unable to load %s' % e.message)
+    except KeyError as e:
+        module.fail_json(msg='Unable to load %s' % e.message, exception=traceback.format_exc())
 
     name = module.params['name']
     fabric_role = module.params['fabric_role']
@@ -113,7 +101,7 @@ def switch(module, check_mode):
 
     response = rest.get('switch-config', data={})
     if response.status_code != 200:
-        module.fail_json(msg="failed to obtain existing switch config: {}".format(response.json['description']))
+        module.fail_json(msg="failed to obtain existing switch config: {0}".format(response.json['description']))
 
     config_present = False
     for switch in response.json:
@@ -139,14 +127,14 @@ def switch(module, check_mode):
         if response.status_code == 204:
             module.exit_json(changed=True)
         else:
-            module.fail_json(msg="error configuring switch '{}': {}".format(name, response.json['description']))
+            module.fail_json(msg="error configuring switch '{0}': {1}".format(name, response.json['description']))
 
     if state in ('absent'):
         response = rest.delete('switch-config[name="%s"]' % name, data={})
         if response.status_code == 204:
             module.exit_json(changed=True)
         else:
-            module.fail_json(msg="error deleting switch '{}': {}".format(name, response.json['description']))
+            module.fail_json(msg="error deleting switch '{0}': {1}".format(name, response.json['description']))
 
 
 def main():
@@ -166,9 +154,9 @@ def main():
 
     try:
         switch(module, check_mode=module.check_mode)
-    except Exception:
-        e = get_exception()
-        module.fail_json(msg=str(e))
+    except Exception as e:
+        module.fail_json(msg=to_native(e), exception=traceback.format_exc())
+
 
 if __name__ == '__main__':
     main()

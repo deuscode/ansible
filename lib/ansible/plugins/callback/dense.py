@@ -1,25 +1,24 @@
 # (c) 2016, Dag Wieers <dag@wieers.com>
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+# (c) 2017 Ansible Project
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-# Make coding more python3-ish
 from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
-from collections import MutableMapping, MutableSequence
+DOCUMENTATION = '''
+callback: dense
+type: stdout
+short_description: minimal stdout output
+extends_documentation_fragment:
+- default_callback
+description:
+- When in verbose mode it will act the same as the default callback
+author:
+- Dag Wieers (@dagwieers)
+version_added: "2.3"
+requirements:
+- set as stdout in configuation
+'''
 
 HAS_OD = False
 try:
@@ -29,16 +28,15 @@ except ImportError:
     pass
 
 from ansible.module_utils.six import binary_type, text_type
+from ansible.module_utils.common._collections_compat import MutableMapping, MutableSequence
 from ansible.plugins.callback.default import CallbackModule as CallbackModule_default
 from ansible.utils.color import colorize, hostcolor
-
-try:
-    from __main__ import display
-except ImportError:
-    from ansible.utils.display import Display
-    display = Display()
+from ansible.utils.display import Display
 
 import sys
+
+display = Display()
+
 
 # Design goals:
 #
@@ -483,14 +481,19 @@ class CallbackModule_dense(CallbackModule_default):
         hosts = sorted(stats.processed.keys())
         for h in hosts:
             t = stats.summarize(h)
-            self._display.display(u"%s : %s %s %s %s" % (
-                hostcolor(h, t),
-                colorize(u'ok', t['ok'], C.COLOR_OK),
-                colorize(u'changed', t['changed'], C.COLOR_CHANGED),
-                colorize(u'unreachable', t['unreachable'], C.COLOR_UNREACHABLE),
-                colorize(u'failed', t['failures'], C.COLOR_ERROR)),
+            self._display.display(
+                u"%s : %s %s %s %s %s %s" % (
+                    hostcolor(h, t),
+                    colorize(u'ok', t['ok'], C.COLOR_OK),
+                    colorize(u'changed', t['changed'], C.COLOR_CHANGED),
+                    colorize(u'unreachable', t['unreachable'], C.COLOR_UNREACHABLE),
+                    colorize(u'failed', t['failures'], C.COLOR_ERROR),
+                    colorize(u'rescued', t['rescued'], C.COLOR_OK),
+                    colorize(u'ignored', t['ignored'], C.COLOR_WARN),
+                ),
                 screen_only=True
             )
+
 
 # When using -vv or higher, simply do the default action
 if display.verbosity >= 2 or not HAS_OD:

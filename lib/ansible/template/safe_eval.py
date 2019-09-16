@@ -24,10 +24,10 @@ import sys
 from ansible import constants as C
 from ansible.module_utils.six import string_types
 from ansible.module_utils.six.moves import builtins
-from ansible.plugins import filter_loader, test_loader
+from ansible.plugins.loader import filter_loader, test_loader
 
 
-def safe_eval(expr, locals={}, include_exceptions=False):
+def safe_eval(expr, locals=None, include_exceptions=False):
     '''
     This is intended for allowing things like:
     with_items: a_list_variable
@@ -38,13 +38,19 @@ def safe_eval(expr, locals={}, include_exceptions=False):
     Based on:
     http://stackoverflow.com/questions/12523516/using-ast-and-whitelists-to-make-pythons-eval-safe
     '''
+    locals = {} if locals is None else locals
 
     # define certain JSON types
     # eg. JSON booleans are unknown to python eval()
-    JSON_TYPES = {
+    OUR_GLOBALS = {
+        '__builtins__': {},  # avoid global builtins as per eval docs
         'false': False,
         'null': None,
         'true': True,
+        # also add back some builtins we do need
+        'True': True,
+        'False': False,
+        'None': None
     }
 
     # this is the whitelist of AST nodes we are going to
@@ -89,9 +95,17 @@ def safe_eval(expr, locals={}, include_exceptions=False):
             )
         )
 
+    # And in Python 3.6 too, although not encountered until Python 3.8, see https://bugs.python.org/issue32892
+    if sys.version_info[:2] >= (3, 6):
+        SAFE_NODES.update(
+            set(
+                (ast.Constant,)
+            )
+        )
+
     filter_list = []
-    for filter in filter_loader.all():
-        filter_list.extend(filter.filters().keys())
+    for filter_ in filter_loader.all():
+        filter_list.extend(filter_.filters().keys())
 
     test_list = []
     for test in test_loader.all():
@@ -129,7 +143,7 @@ def safe_eval(expr, locals={}, include_exceptions=False):
         # Note: passing our own globals and locals here constrains what
         # callables (and other identifiers) are recognized.  this is in
         # addition to the filtering of builtins done in CleansingNodeVisitor
-        result = eval(compiled, JSON_TYPES, dict(locals))
+        result = eval(compiled, OUR_GLOBALS, dict(locals))
 
         if include_exceptions:
             return (result, None)

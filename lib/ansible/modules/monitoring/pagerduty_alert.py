@@ -1,22 +1,13 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+# Copyright: Ansible Project
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
+
+
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
 
@@ -29,19 +20,27 @@ description:
     - This module will let you trigger, acknowledge or resolve a PagerDuty incident by sending events
 version_added: "1.9"
 author:
-    - "Amanpreet Singh (@aps-sids)"
+    - "Amanpreet Singh (@ApsOps)"
 requirements:
     - PagerDuty API access
 options:
     name:
         description:
-            - PagerDuty unique subdomain.
+            - PagerDuty unique subdomain. Obsolete. It is not used with PagerDuty REST v2 API.
+    service_id:
+        description:
+            - ID of PagerDuty service when incidents will be triggered, acknowledged or resolved.
         required: true
+        version_added: "2.7"
     service_key:
         description:
+            - The GUID of one of your "Generic API" services. Obsolete. Please use I(integration_key).
+    integration_key:
+        description:
             - The GUID of one of your "Generic API" services.
-            - This is the "service key" listed on a Generic API's service detail page.
+            - This is the "integration key" listed on a "Integrations" tab of PagerDuty service.
         required: true
+        version_added: "2.7"
     state:
         description:
             - Type of event to be sent.
@@ -71,6 +70,7 @@ options:
             - For C(acknowledged) or C(resolved) I(state) - This should be the incident_key you received back when the incident was first opened by a
               trigger event. Acknowledge events referencing resolved or nonexistent incidents will be discarded.
         required: false
+        version_added: "2.7"
     client:
         description:
         - The name of the monitoring client that is triggering this event.
@@ -85,15 +85,17 @@ EXAMPLES = '''
 # Trigger an incident with just the basic options
 - pagerduty_alert:
     name: companyabc
-    service_key: xxx
+    integration_key: xxx
     api_key: yourapikey
+    service_id: PDservice
     state: triggered
     desc: problem that led to this trigger
 
 # Trigger an incident with more options
 - pagerduty_alert:
-    service_key: xxx
+    integration_key: xxx
     api_key: yourapikey
+    service_id: PDservice
     state: triggered
     desc: problem that led to this trigger
     incident_key: somekey
@@ -102,37 +104,51 @@ EXAMPLES = '''
 
 # Acknowledge an incident based on incident_key
 - pagerduty_alert:
-    service_key: xxx
+    integration_key: xxx
     api_key: yourapikey
+    service_id: PDservice
     state: acknowledged
     incident_key: somekey
     desc: "some text for incident's log"
 
 # Resolve an incident based on incident_key
 - pagerduty_alert:
-    service_key: xxx
+    integration_key: xxx
     api_key: yourapikey
+    service_id: PDservice
     state: resolved
     incident_key: somekey
     desc: "some text for incident's log"
 '''
+import json
+
+from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils.urls import fetch_url
+from ansible.module_utils.six.moves.urllib.parse import urlparse, urlencode, urlunparse
 
 
-def check(module, name, state, service_key, api_key, incident_key=None):
-    url = "https://%s.pagerduty.com/api/v1/incidents" % name
+def check(module, name, state, service_id, integration_key, api_key, incident_key=None, http_call=fetch_url):
+    url = 'https://api.pagerduty.com/incidents'
     headers = {
         "Content-type": "application/json",
-        "Authorization": "Token token=%s" % api_key
+        "Authorization": "Token token=%s" % api_key,
+        'Accept': 'application/vnd.pagerduty+json;version=2'
     }
 
-    data = {
-        "service_key": service_key,
-        "incident_key": incident_key,
-        "sort_by": "incident_number:desc"
+    params = {
+        'service_ids[]': service_id,
+        'sort_by': 'incident_number:desc',
+        'time_zone': 'UTC'
     }
+    if incident_key:
+        params['incident_key'] = incident_key
 
-    response, info = fetch_url(module, url, method='get',
-                               headers=headers, data=json.dumps(data))
+    url_parts = list(urlparse(url))
+    url_parts[4] = urlencode(params, True)
+
+    url = urlunparse(url_parts)
+
+    response, info = http_call(module, url, method='get', headers=headers)
 
     if info['status'] != 200:
         module.fail_json(msg="failed to check current incident status."
@@ -172,8 +188,10 @@ def send_event(module, service_key, event_type, desc,
 def main():
     module = AnsibleModule(
         argument_spec=dict(
-            name=dict(required=True),
-            service_key=dict(required=True),
+            name=dict(required=False),
+            service_id=dict(required=True),
+            service_key=dict(require=False),
+            integration_key=dict(require=False),
             api_key=dict(required=True),
             state=dict(required=True,
                        choices=['triggered', 'acknowledged', 'resolved']),
@@ -186,6 +204,8 @@ def main():
     )
 
     name = module.params['name']
+    service_id = module.params['service_id']
+    integration_key = module.params['integration_key']
     service_key = module.params['service_key']
     api_key = module.params['api_key']
     state = module.params['state']
@@ -193,6 +213,14 @@ def main():
     client_url = module.params['client_url']
     desc = module.params['desc']
     incident_key = module.params['incident_key']
+
+    if integration_key is None:
+        if service_key is not None:
+            integration_key = service_key
+            module.warn('"service_key" is obsolete parameter and will be removed.'
+                        ' Please, use "integration_key" instead')
+        else:
+            module.fail_json(msg="'integration_key' is required parameter")
 
     state_event_dict = {
         'triggered': 'trigger',
@@ -206,18 +234,15 @@ def main():
         module.fail_json(msg="incident_key is required for "
                              "acknowledge or resolve events")
 
-    out, changed = check(module, name, state,
-                         service_key, api_key, incident_key)
+    out, changed = check(module, name, state, service_id,
+                         integration_key, api_key, incident_key)
 
     if not module.check_mode and changed is True:
-        out = send_event(module, service_key, event_type, desc,
+        out = send_event(module, integration_key, event_type, desc,
                          incident_key, client, client_url)
 
     module.exit_json(result=out, changed=changed)
 
-# import module snippets
-from ansible.module_utils.basic import *
-from ansible.module_utils.urls import *
 
 if __name__ == '__main__':
     main()

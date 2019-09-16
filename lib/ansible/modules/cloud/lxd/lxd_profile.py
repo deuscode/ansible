@@ -1,25 +1,14 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-# (c) 2016, Hiroaki Nakamura <hnakamur@gmail.com>
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+# Copyright: (c) 2016, Hiroaki Nakamura <hnakamur@gmail.com>
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
 
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
 
@@ -37,6 +26,10 @@ options:
         description:
           - Name of a profile.
         required: true
+    description:
+        description:
+          - Description of the profile.
+        version_added: "2.5"
     config:
         description:
           - 'The config for the container (e.g. {"limits.memory": "4GB"}).
@@ -74,16 +67,24 @@ options:
           - The unix domain socket path or the https URL for the LXD server.
         required: false
         default: unix:/var/lib/lxd/unix.socket
-    key_file:
+    snap_url:
+        description:
+          - The unix domain socket path when LXD is installed by snap package manager.
+        required: false
+        default: unix:/var/snap/lxd/common/lxd/unix.socket
+        version_added: '2.8'
+    client_key:
         description:
           - The client certificate key file path.
         required: false
         default: '"{}/.config/lxc/client.key" .format(os.environ["HOME"])'
-    cert_file:
+        aliases: [ key_file ]
+    client_cert:
         description:
           - The client certificate file path.
         required: false
         default: '"{}/.config/lxc/client.crt" .format(os.environ["HOME"])'
+        aliases: [ cert_file ]
     trust_password:
         description:
           - The client trusted password.
@@ -124,9 +125,9 @@ EXAMPLES = '''
   - name: create macvlan profile
     lxd_profile:
       url: https://127.0.0.1:8443
-      # These cert_file and key_file values are equal to the default values.
-      #cert_file: "{{ lookup('env', 'HOME') }}/.config/lxc/client.crt"
-      #key_file: "{{ lookup('env', 'HOME') }}/.config/lxc/client.key"
+      # These client_cert and client_key values are equal to the default values.
+      #client_cert: "{{ lookup('env', 'HOME') }}/.config/lxc/client.crt"
+      #client_key: "{{ lookup('env', 'HOME') }}/.config/lxc/client.key"
       trust_password: mypassword
       name: macvlan
       state: present
@@ -158,11 +159,11 @@ EXAMPLES = '''
         state: present
 '''
 
-RETURN='''
+RETURN = '''
 old_state:
   description: The old state of the profile
   returned: success
-  type: string
+  type: str
   sample: "absent"
 logs:
   description: The logs of requests and responses.
@@ -177,7 +178,10 @@ actions:
 '''
 
 import os
+
+from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.lxd import LXDClient, LXDClientException
+
 
 # PROFILE_STATES is a list for states supported
 PROFILES_STATES = [
@@ -188,6 +192,7 @@ PROFILES_STATES = [
 CONFIG_PARAMS = [
     'config', 'description', 'devices'
 ]
+
 
 class LXDProfileManagement(object):
     def __init__(self, module):
@@ -202,10 +207,18 @@ class LXDProfileManagement(object):
         self.state = self.module.params['state']
         self.new_name = self.module.params.get('new_name', None)
 
-        self.url = self.module.params['url']
-        self.key_file = self.module.params.get('key_file', None)
-        self.cert_file = self.module.params.get('cert_file', None)
+        self.key_file = self.module.params.get('client_key', None)
+        self.cert_file = self.module.params.get('client_cert', None)
         self.debug = self.module._verbosity >= 4
+
+        try:
+            if os.path.exists(self.module.params['snap_url'].replace('unix:', '')):
+                self.url = self.module.params['snap_url']
+            else:
+                self.url = self.module.params['url']
+        except Exception as e:
+            self.module.fail_json(msg=e.msg)
+
         try:
             self.client = LXDClient(
                 self.url, key_file=self.key_file, cert_file=self.cert_file,
@@ -266,7 +279,7 @@ class LXDProfileManagement(object):
 
     def _rename_profile(self):
         config = {'name': self.new_name}
-        self.client.do('POST', '/1.0/profiles/{}'.format(self.name), config)
+        self.client.do('POST', '/1.0/profiles/{0}'.format(self.name), config)
         self.actions.append('rename')
         self.name = self.new_name
 
@@ -287,11 +300,11 @@ class LXDProfileManagement(object):
         config = self.old_profile_json.copy()
         for k, v in self.config.items():
             config[k] = v
-        self.client.do('PUT', '/1.0/profiles/{}'.format(self.name), config)
+        self.client.do('PUT', '/1.0/profiles/{0}'.format(self.name), config)
         self.actions.append('apply_profile_configs')
 
     def _delete_profile(self):
-        self.client.do('DELETE', '/1.0/profiles/{}'.format(self.name))
+        self.client.do('DELETE', '/1.0/profiles/{0}'.format(self.name))
         self.actions.append('delete')
 
     def run(self):
@@ -355,15 +368,21 @@ def main():
                 type='str',
                 default='unix:/var/lib/lxd/unix.socket'
             ),
-            key_file=dict(
+            snap_url=dict(
                 type='str',
-                default='{}/.config/lxc/client.key'.format(os.environ['HOME'])
+                default='unix:/var/snap/lxd/common/lxd/unix.socket'
             ),
-            cert_file=dict(
+            client_key=dict(
                 type='str',
-                default='{}/.config/lxc/client.crt'.format(os.environ['HOME'])
+                default='{0}/.config/lxc/client.key'.format(os.environ['HOME']),
+                aliases=['key_file']
             ),
-            trust_password=dict( type='str', no_log=True)
+            client_cert=dict(
+                type='str',
+                default='{0}/.config/lxc/client.crt'.format(os.environ['HOME']),
+                aliases=['cert_file']
+            ),
+            trust_password=dict(type='str', no_log=True)
         ),
         supports_check_mode=False,
     )
@@ -371,7 +390,6 @@ def main():
     lxd_manage = LXDProfileManagement(module=module)
     lxd_manage.run()
 
-# import module bits
-from ansible.module_utils.basic import *
+
 if __name__ == '__main__':
     main()

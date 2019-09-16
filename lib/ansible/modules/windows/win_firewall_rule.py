@@ -1,105 +1,115 @@
-#!/usr/bin/env python
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
 
-# (c) 2014, Timothy Vandenbrande <timothy.vandenbrande@gmail.com>
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible. If not, see <http://www.gnu.org/licenses/>.
+# Copyright: (c) 2014, Timothy Vandenbrande <timothy.vandenbrande@gmail.com>
+# Copyright: (c) 2017, Artem Zinenko <zinenkoartem@gmail.com>
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
-
 
 DOCUMENTATION = r'''
 ---
 module: win_firewall_rule
 version_added: "2.0"
-author: Timothy Vandenbrande
 short_description: Windows firewall automation
 description:
-    - Allows you to create/remove/update firewall rules
+  - Allows you to create/remove/update firewall rules.
 options:
-    enabled:
-        description:
-            - Is this firewall rule enabled or disabled
-        default: 'yes'
-        choices: [ 'no', 'yes' ]
-        aliases: [ 'enable' ]
-    state:
-        description:
-            - Should this rule be added or removed
-        default: "present"
-        choices: ['present', 'absent']
-    name:
-        description:
-            - The rules name
-        required: true
-    direction:
-        description:
-            - Is this rule for inbound or outbound traffic
-        required: true
-        choices: ['in', 'out']
-    action:
-        description:
-            - What to do with the items this rule is for
-        required: true
-        choices: ['allow', 'block', 'bypass']
+  enabled:
     description:
-        description:
-            - Description for the firewall rule
-    localip:
-        description:
-            - The local ip address this rule applies to
-        default: 'any'
-    remoteip:
-        description:
-            - The remote ip address/range this rule applies to
-        default: 'any'
-    localport:
-        description:
-            - The local port this rule applies to
-    remoteport:
-        description:
-            - The remote port this rule applies to
-    program:
-        description:
-            - The program this rule applies to
-    service:
-        description:
-            - The service this rule applies to
-    protocol:
-        description:
-            - The protocol this rule applies to
-        default: 'any'
-    profiles:
-        description:
-            - The profile this rule applies to
-        default: 'domain,private,public'
-        aliases: [ 'profile' ]
-    force:
-        description:
-            - Replace any existing rule by removing it first.
-        default: 'no'
-        choices: [ 'no', 'yes' ]
-notes:
-- The implementation uses C(netsh advfirewall) underneath, a pure-Powershell
-  reimplementation would be more powerful.
-- Modifying existing firewall rules is not possible, the module does allow
-  replacing complete rules based on name, but that works by removing the
-  existing rule completely, and recreating it with provided information
-  (when using C(force)).
+      - Whether this firewall rule is enabled or disabled.
+      - Defaults to C(true) when creating a new rule.
+    type: bool
+    aliases: [ enable ]
+  state:
+    description:
+      - Should this rule be added or removed.
+    type: str
+    choices: [ absent, present ]
+    default: present
+  name:
+    description:
+      - The rule's display name.
+    type: str
+    required: yes
+  group:
+    description:
+      - The group name for the rule.
+    version_added: '2.9'
+    type: str
+  direction:
+    description:
+      - Whether this rule is for inbound or outbound traffic.
+      - Defaults to C(in) when creating a new rule.
+    type: str
+    choices: [ in, out ]
+  action:
+    description:
+      - What to do with the items this rule is for.
+      - Defaults to C(allow) when creating a new rule.
+    type: str
+    choices: [ allow, block ]
+  description:
+    description:
+      - Description for the firewall rule.
+    type: str
+  localip:
+    description:
+      - The local ip address this rule applies to.
+      - Set to C(any) to apply to all local ip addresses.
+      - Defaults to C(any) when creating a new rule.
+    type: str
+  remoteip:
+    description:
+      - The remote ip address/range this rule applies to.
+      - Set to C(any) to apply to all remote ip addresses.
+      - Defaults to C(any) when creating a new rule.
+    type: str
+  localport:
+    description:
+      - The local port this rule applies to.
+      - Set to C(any) to apply to all local ports.
+      - Defaults to C(any) when creating a new rule.
+      - Must have I(protocol) set
+    type: str
+  remoteport:
+    description:
+      - The remote port this rule applies to.
+      - Set to C(any) to apply to all remote ports.
+      - Defaults to C(any) when creating a new rule.
+      - Must have I(protocol) set
+    type: str
+  program:
+    description:
+      - The program this rule applies to.
+      - Set to C(any) to apply to all programs.
+      - Defaults to C(any) when creating a new rule.
+    type: str
+  service:
+    description:
+      - The service this rule applies to.
+      - Set to C(any) to apply to all services.
+      - Defaults to C(any) when creating a new rule.
+    type: str
+  protocol:
+    description:
+      - The protocol this rule applies to.
+      - Set to C(any) to apply to all services.
+      - Defaults to C(any) when creating a new rule.
+    type: str
+  profiles:
+    description:
+      - The profile this rule applies to.
+      - Defaults to C(domain,private,public) when creating a new rule.
+    type: list
+    aliases: [ profile ]
+seealso:
+- module: win_firewall
+author:
+  - Artem Zinenko (@ar7z1)
+  - Timothy Vandenbrande (@TimothyVandenbrande)
 '''
 
 EXAMPLES = r'''
@@ -121,6 +131,17 @@ EXAMPLES = r'''
     direction: in
     protocol: tcp
     profiles: private
+    state: present
+    enabled: yes
+
+- name: Firewall rule to be created for application group
+  win_firewall_rule:
+    name: SMTP
+    group: application
+    localport: 25
+    action: allow
+    direction: in
+    protocol: tcp
     state: present
     enabled: yes
 '''

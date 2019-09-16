@@ -3,101 +3,84 @@
 # Copyright (c) 2016 Matt Davis, <mdavis@ansible.com>
 #                    Chris Houseknecht, <house@redhat.com>
 #
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
-#
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
 
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
-                    'supported_by': 'curated'}
+                    'supported_by': 'community'}
 
 
 DOCUMENTATION = '''
 ---
 module: azure_rm_virtualnetwork
 version_added: "2.1"
-short_description: Manage Azure virtual networks.
+short_description: Manage Azure virtual networks
 description:
     - Create, update or delete a virtual networks. Allows setting and updating the available IPv4 address ranges
-      and setting custom DNS servers. Use the azure_rm_subnet module to associate subnets with a virtual network.
+      and setting custom DNS servers. Use the M(azure_rm_subnet) module to associate subnets with a virtual network.
 options:
     resource_group:
         description:
-            - name of resource group.
+            - Name of resource group.
         required: true
     address_prefixes_cidr:
         description:
-            - List of IPv4 address ranges where each is formatted using CIDR notation. Required when creating
-              a new virtual network or using purge_address_prefixes.
+            - List of IPv4 address ranges where each is formatted using CIDR notation.
+            - Required when creating a new virtual network or using I(purge_address_prefixes).
         aliases:
             - address_prefixes
-        default: null
-        required: false
     dns_servers:
         description:
-            - Custom list of DNS servers. Maximum length of two. The first server in the list will be treated
-              as the Primary server. This is an explicit list. Existing DNS servers will be replaced with the
-              specified list. Use the purge_dns_servers option to remove all custom DNS servers and revert to
-              default Azure servers.
-        default: null
-        required: false
+            - Custom list of DNS servers. Maximum length of two.
+            - The first server in the list will be treated as the Primary server. This is an explicit list.
+            - Existing DNS servers will be replaced with the specified list.
+            - Use the I(purge_dns_servers) option to remove all custom DNS servers and revert to default Azure servers.
     location:
         description:
-            - Valid azure location. Defaults to location of the resource group.
-        default: resource_group location
-        required: false
+            - Valid Azure location. Defaults to location of the resource group.
     name:
         description:
-            - name of the virtual network.
+            - Name of the virtual network.
         required: true
     purge_address_prefixes:
         description:
-            - Use with state present to remove any existing address_prefixes.
-        default: false
+            - Use with I(state=present) to remove any existing I(address_prefixes).
+        type: bool
+        default: 'no'
+        aliases:
+          - purge
     purge_dns_servers:
         description:
-            - Use with state present to remove existing DNS servers, reverting to default Azure servers. Mutually
-              exclusive with dns_servers.
-        default: false
-        required: false
+            - Use with I(state=present) to remove existing DNS servers, reverting to default Azure servers. Mutually exclusive with DNS servers.
+        type: bool
+        default: 'no'
     state:
         description:
-            - Assert the state of the virtual network. Use 'present' to create or update and
-              'absent' to delete.
+            - State of the virtual network. Use C(present) to create or update and C(absent) to delete.
         default: present
         choices:
             - absent
             - present
-        required: false
 
 extends_documentation_fragment:
     - azure
     - azure_tags
 
 author:
-    - "Chris Houseknecht (@chouseknecht)"
-    - "Matt Davis (@nitzmahone)"
+    - Chris Houseknecht (@chouseknecht)
+    - Matt Davis (@nitzmahone)
 
 '''
 
 EXAMPLES = '''
     - name: Create a virtual network
       azure_rm_virtualnetwork:
-        name: foobar
-        resource_group: Testing
+        resource_group: myResourceGroup
+        name: myVirtualNetwork
         address_prefixes_cidr:
             - "10.1.0.0/16"
             - "172.100.0.0/16"
@@ -110,45 +93,87 @@ EXAMPLES = '''
 
     - name: Delete a virtual network
       azure_rm_virtualnetwork:
-        name: foobar
-        resource_group: Testing
+        resource_group: myResourceGroup
+        name: myVirtualNetwork
         state: absent
 '''
 RETURN = '''
 state:
-    description: Current state of the virtual network.
+    description:
+       - Current state of the virtual network.
     returned: always
-    type: dict
-    sample: {
-        "address_prefixes": [
-            "10.1.0.0/16",
-            "172.100.0.0/16"
-        ],
-        "dns_servers": [
-            "127.0.0.1",
-            "127.0.0.3"
-        ],
-        "etag": 'W/"0712e87c-f02f-4bb3-8b9e-2da0390a3886"',
-        "id": "/subscriptions/XXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXX/resourceGroups/Testing/providers/Microsoft.Network/virtualNetworks/my_test_network",
-        "location": "eastus",
-        "name": "my_test_network",
-        "provisioning_state": "Succeeded",
-        "tags": null,
-        "type": "Microsoft.Network/virtualNetworks"
-    }
+    type: complex
+    contains:
+        address_prefixes:
+            description:
+                - The virtual network IPv4 address ranges.
+            returned: always
+            type: list
+            sample: [
+                     "10.1.0.0/16",
+                     "172.100.0.0/16"
+                    ]
+        dns_servers:
+            description:
+                - DNS servers.
+            returned: always
+            type: list
+            sample: [
+                    "127.0.0.1",
+                    "127.0.0.3"
+                    ]
+        etag:
+            description:
+                - A unique read-only string that changes whenever the resource is update.
+            returned: always
+            type: str
+            sample: 'W/"0712e87c-f02f-4bb3-8b9e-2da0390a3886"'
+        id:
+            description:
+                - Resource ID.
+            returned: always
+            type: str
+            sample: "/subscriptions/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/resourceGroup/myResourceGroup/providers/
+                    Microsoft.Network/virtualNetworks/myVirtualNetwork"
+        location:
+            description:
+                - The Geo-location where the resource lives.
+            returned: always
+            type: str
+            sample: eastus
+        name:
+            description:
+                - Resource name.
+            returned: always
+            type: str
+            sample: my_test_network
+        provisioning_state:
+            description:
+                - Provisioning state of the virtual network.
+            returned: always
+            type: str
+            sample: Succeeded
+        tags:
+            description:
+                - Resource tags, such as { 'tags1':'value1' }
+            returned: always
+            type: dict
+            sample: { 'key1':'value1' }
+        type:
+            descriptioin:
+                - Resource type.
+            returned: always
+            type: str
+            sample: Microsoft.Network/virtualNetworks
 '''
-
-
-from ansible.module_utils.basic import *
-from ansible.module_utils.azure_rm_common import *
 
 try:
     from msrestazure.azure_exceptions import CloudError
-    from azure.mgmt.network.models import VirtualNetwork, AddressSpace, DhcpOptions
 except ImportError:
     # This is handled in azure_rm_common
     pass
 
+from ansible.module_utils.azure_rm_common import AzureRMModuleBase, CIDR_PATTERN
 
 
 def virtual_network_to_dict(vnet):
@@ -209,7 +234,7 @@ class AzureRMVirtualNetwork(AzureRMModuleBase):
         self.dns_servers = None
         self.purge_dns_servers = None
 
-        self.results=dict(
+        self.results = dict(
             changed=False,
             state=dict()
         )
@@ -221,7 +246,7 @@ class AzureRMVirtualNetwork(AzureRMModuleBase):
 
     def exec_module(self, **kwargs):
 
-        for key in self.module_arg_spec.keys() + ['tags']:
+        for key in list(self.module_arg_spec.keys()) + ['tags']:
             setattr(self, key, kwargs[key])
 
         self.results['check_mode'] = self.check_mode
@@ -276,7 +301,7 @@ class AzureRMVirtualNetwork(AzureRMModuleBase):
                     changed = True
 
                 if self.dns_servers:
-                    existing_dns_set = set(vnet.dhcp_options.dns_servers)
+                    existing_dns_set = set(vnet.dhcp_options.dns_servers) if vnet.dhcp_options else set([])
                     requested_dns_set = set(self.dns_servers)
                     if existing_dns_set != requested_dns_set:
                         self.log('CHANGED: replacing DNS servers')
@@ -309,38 +334,38 @@ class AzureRMVirtualNetwork(AzureRMModuleBase):
                     self.log("Create virtual network {0}".format(self.name))
                     if not self.address_prefixes_cidr:
                         self.fail('Parameter error: address_prefixes_cidr required when creating a virtual network')
-                    vnet = VirtualNetwork(
+                    vnet_param = self.network_models.VirtualNetwork(
                         location=self.location,
-                        address_space=AddressSpace(
+                        address_space=self.network_models.AddressSpace(
                             address_prefixes=self.address_prefixes_cidr
                         )
                     )
                     if self.dns_servers:
-                        vnet.dhcp_options = DhcpOptions(
+                        vnet_param.dhcp_options = self.network_models.DhcpOptions(
                             dns_servers=self.dns_servers
                         )
                     if self.tags:
-                        vnet.tags = self.tags
-                    self.results['state'] = self.create_or_update_vnet(vnet)
+                        vnet_param.tags = self.tags
+                    self.results['state'] = self.create_or_update_vnet(vnet_param)
                 else:
                     # update existing virtual network
                     self.log("Update virtual network {0}".format(self.name))
-                    vnet = VirtualNetwork(
+                    vnet_param = self.network_models.VirtualNetwork(
                         location=results['location'],
-                        address_space=AddressSpace(
+                        address_space=self.network_models.AddressSpace(
                             address_prefixes=results['address_prefixes']
                         ),
-                        tags=results['tags']
+                        tags=results['tags'],
+                        subnets=vnet.subnets
                     )
                     if results.get('dns_servers'):
-                        vnet.dhcp_options = DhcpOptions(
+                        vnet_param.dhcp_options = self.network_models.DhcpOptions(
                             dns_servers=results['dns_servers']
                         )
-                    self.results['state'] = self.create_or_update_vnet(vnet)
+                    self.results['state'] = self.create_or_update_vnet(vnet_param)
             elif self.state == 'absent':
                 self.delete_virtual_network()
                 self.results['state']['status'] = 'Deleted'
-
 
         return self.results
 
@@ -364,6 +389,6 @@ class AzureRMVirtualNetwork(AzureRMModuleBase):
 def main():
     AzureRMVirtualNetwork()
 
+
 if __name__ == '__main__':
     main()
-

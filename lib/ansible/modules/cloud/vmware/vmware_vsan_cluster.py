@@ -1,27 +1,15 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-# (c) 2015, Russell Teague <rteague2 () csc.com>
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+# Copyright: (c) 2015, Russell Teague <rteague2 () csc.com>
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
+
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
-
 
 DOCUMENTATION = '''
 ---
@@ -30,7 +18,8 @@ short_description: Configure VSAN clustering on an ESXi host
 description:
     - This module can be used to configure VSAN clustering on an ESXi host
 version_added: 2.0
-author: "Russell Teague (@mtnbikenc)"
+author:
+- Russell Teague (@mtnbikenc)
 notes:
     - Tested on vSphere 5.5
 requirements:
@@ -41,15 +30,13 @@ options:
         description:
             - Desired cluster UUID
         required: False
+        type: str
 extends_documentation_fragment: vmware.documentation
 '''
 
 EXAMPLES = '''
-# Example command from Ansible Playbook
-
 - name: Configure VMware VSAN Cluster
   hosts: deploy_node
-  gather_facts: False
   tags:
     - vsan
   tasks:
@@ -58,6 +45,7 @@ EXAMPLES = '''
          hostname: "{{ groups['esxi'][0] }}"
          username: "{{ esxi_username }}"
          password: "{{ site_password }}"
+      delegate_to: localhost
       register: vsan_cluster
 
     - name: Configure VSAN on remaining hosts
@@ -66,8 +54,8 @@ EXAMPLES = '''
          username: "{{ esxi_username }}"
          password: "{{ site_password }}"
          cluster_uuid: "{{ vsan_cluster.cluster_uuid }}"
-      with_items: "{{ groups['esxi'][1:] }}"
-
+      delegate_to: localhost
+      loop: "{{ groups['esxi'][1:] }}"
 '''
 
 try:
@@ -75,6 +63,10 @@ try:
     HAS_PYVMOMI = True
 except ImportError:
     HAS_PYVMOMI = False
+
+from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils.vmware import (HAS_PYVMOMI, connect_to_api, get_all_objs, vmware_argument_spec,
+                                         wait_for_task)
 
 
 def create_vsan_cluster(host_system, new_cluster_uuid):
@@ -117,7 +109,7 @@ def main():
         host = get_all_objs(content, [vim.HostSystem])
         if not host:
             module.fail_json(msg="Unable to locate Physical Host.")
-        host_system = host.keys()[0]
+        host_system = list(host)[0]
         changed, result, cluster_uuid = create_vsan_cluster(host_system, new_cluster_uuid)
         module.exit_json(changed=changed, result=result, cluster_uuid=cluster_uuid)
 
@@ -128,8 +120,6 @@ def main():
     except Exception as e:
         module.fail_json(msg=str(e))
 
-from ansible.module_utils.vmware import *
-from ansible.module_utils.basic import *
 
 if __name__ == '__main__':
     main()

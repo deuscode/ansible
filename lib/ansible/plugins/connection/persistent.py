@@ -1,37 +1,40 @@
-# (c) 2017 Red Hat Inc.
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+# 2017 Red Hat Inc.
+# (c) 2017 Ansible Project
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
-import os
-import pty
-import subprocess
-import sys
-
-from ansible.module_utils._text import to_bytes
-from ansible.module_utils.six.moves import cPickle
+DOCUMENTATION = """
+author: Ansible Core Team
+connection: persistent
+short_description: Use a persistent unix socket for connection
+description:
+  - This is a helper plugin to allow making other connections persistent.
+version_added: "2.3"
+options:
+  persistent_command_timeout:
+    type: int
+    description:
+      - Configures, in seconds, the amount of time to wait for a command to
+        return from the remote device.  If this timer is exceeded before the
+        command returns, the connection plugin will raise an exception and
+        close
+    default: 10
+    ini:
+      - section: persistent_connection
+        key: command_timeout
+    env:
+      - name: ANSIBLE_PERSISTENT_COMMAND_TIMEOUT
+    vars:
+      - name: ansible_command_timeout
+"""
+from ansible.executor.task_executor import start_connection
 from ansible.plugins.connection import ConnectionBase
+from ansible.module_utils.connection import Connection as SocketConnection
+from ansible.utils.display import Display
 
-try:
-    from __main__ import display
-except ImportError:
-    from ansible.utils.display import Display
-    display = Display()
+display = Display()
 
 
 class Connection(ConnectionBase):
@@ -44,45 +47,31 @@ class Connection(ConnectionBase):
         self._connected = True
         return self
 
-    def _do_it(self, action):
-
-        master, slave = pty.openpty()
-        p = subprocess.Popen(["ansible-connection"], stdin=slave, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdin = os.fdopen(master, 'wb', 0)
-        os.close(slave)
-
-        # Need to force a protocol that is compatible with both py2 and py3.
-        # That would be protocol=2 or less.
-        # Also need to force a protocol that excludes certain control chars as
-        # stdin in this case is a pty and control chars will cause problems.
-        # that means only protocol=0 will work.
-        src = cPickle.dumps(self._play_context.serialize(), protocol=0)
-        stdin.write(src)
-
-        stdin.write(b'\n#END_INIT#\n')
-        stdin.write(to_bytes(action))
-        stdin.write(b'\n\n')
-
-        (stdout, stderr) = p.communicate()
-        stdin.close()
-
-        return (p.returncode, stdout, stderr)
-
     def exec_command(self, cmd, in_data=None, sudoable=True):
-        super(Connection, self).exec_command(cmd, in_data=in_data, sudoable=sudoable)
-        return self._do_it('EXEC: ' + cmd)
+        display.vvvv('exec_command(), socket_path=%s' % self.socket_path, host=self._play_context.remote_addr)
+        connection = SocketConnection(self.socket_path)
+        out = connection.exec_command(cmd, in_data=in_data, sudoable=sudoable)
+        return 0, out, ''
 
     def put_file(self, in_path, out_path):
-        super(Connection, self).put_file(in_path, out_path)
-        self._do_it('PUT: %s %s' % (in_path, out_path))
+        pass
 
     def fetch_file(self, in_path, out_path):
-        super(Connection, self).fetch_file(in_path, out_path)
-        self._do_it('FETCH: %s %s' % (in_path, out_path))
+        pass
 
     def close(self):
         self._connected = False
 
     def run(self):
-        rc, out, err = self._do_it('RUN:')
-        return out
+        """Returns the path of the persistent connection socket.
+
+        Attempts to ensure (within playcontext.timeout seconds) that the
+        socket path exists. If the path exists (or the timeout has expired),
+        returns the socket path.
+        """
+        display.vvvv('starting connection from persistent connection plugin', host=self._play_context.remote_addr)
+        variables = {'ansible_command_timeout': self.get_option('persistent_command_timeout')}
+        socket_path = start_connection(self._play_context, variables)
+        display.vvvv('local domain socket path is %s' % socket_path, host=self._play_context.remote_addr)
+        setattr(self, '_socket_path', socket_path)
+        return socket_path

@@ -1,23 +1,13 @@
 #!/usr/bin/python
 
 # (c) 2016, NetApp, Inc
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
-#
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
+
+
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
 
@@ -25,7 +15,7 @@ ANSIBLE_METADATA = {'metadata_version': '1.0',
 DOCUMENTATION = """
 ---
 module: netapp_e_amg_sync
-short_description: Conduct synchronization actions on asynchronous mirror groups.
+short_description: NetApp E-Series conduct synchronization actions on asynchronous mirror groups.
 description:
     - Allows for the initialization, suspension and resumption of an asynchronous mirror group's synchronization for NetApp E-series storage arrays.
 version_added: '2.2'
@@ -48,6 +38,7 @@ options:
         default: true
         description:
         - Should https certificates be validated?
+        type: bool
     ssid:
         description:
             - The ID of the storage array containing the AMG you wish to target
@@ -73,9 +64,7 @@ options:
             - If false, the synchronization will be suspended if the amount of unsynchronized data exceeds the CoW Repository capacity on the secondary
               and the failures point will be preserved.
             - "NOTE: This only has impact for newly launched syncs."
-        choices:
-            - yes
-            - no
+        type: bool
         default: no
 """
 EXAMPLES = """
@@ -92,7 +81,7 @@ RETURN = """
 json:
     description: The object attributes of the AMG.
     returned: success
-    type: string
+    type: str
     example:
         {
             "changed": false,
@@ -133,10 +122,8 @@ import json
 
 from ansible.module_utils.api import basic_auth_argument_spec
 from ansible.module_utils.basic import AnsibleModule
-
-from ansible.module_utils.pycompat24 import get_exception
-from ansible.module_utils.urls import open_url
 from ansible.module_utils.six.moves.urllib.error import HTTPError
+from ansible.module_utils.urls import open_url
 
 
 def request(url, data=None, headers=None, method='GET', use_proxy=True,
@@ -147,9 +134,8 @@ def request(url, data=None, headers=None, method='GET', use_proxy=True,
                      force=force, last_mod_time=last_mod_time, timeout=timeout, validate_certs=validate_certs,
                      url_username=url_username, url_password=url_password, http_agent=http_agent,
                      force_basic_auth=force_basic_auth)
-    except HTTPError:
-        err = get_exception()
-        r = err.fp
+    except HTTPError as e:
+        r = e.fp
 
     try:
         raw_data = r.read()
@@ -157,7 +143,7 @@ def request(url, data=None, headers=None, method='GET', use_proxy=True,
             data = json.loads(raw_data)
         else:
             raw_data = None
-    except:
+    except Exception:
         if ignore_errors:
             pass
         else:

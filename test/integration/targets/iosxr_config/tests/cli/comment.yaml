@@ -1,5 +1,5 @@
 ---
-- debug: msg="START cli/comment.yaml"
+- debug: msg="START cli/comment.yaml on connection={{ ansible_connection }}"
 
 - name: setup
   iosxr_config:
@@ -14,6 +14,7 @@
   iosxr_config:
     src: basic/config.j2
     comment: "this is sensible commit message"
+    exclusive: true
   register: result
 
 - assert:
@@ -24,6 +25,7 @@
 - name: check device with config
   iosxr_config:
     src: basic/config.j2
+    exclusive: true
   register: result
 
 - assert:
@@ -31,4 +33,4 @@
       - "result.changed == false"
       - "result.updates is not defined"
 
-- debug: msg="END cli/comment.yaml"
+- debug: msg="END cli/comment.yaml on connection={{ ansible_connection }}"

@@ -1,26 +1,15 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-# (c) 2017, Davis Phillips davis.phillips@gmail.com
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+# Copyright: (c) 2017, Davis Phillips davis.phillips@gmail.com
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-ANSIBLE_METADATA = {'status': ['preview'],
-                    'supported_by': 'community',
-                    'metadata_version': '1.0'}
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
+
+ANSIBLE_METADATA = {'metadata_version': '1.1',
+                    'status': ['preview'],
+                    'supported_by': 'community'}
 
 DOCUMENTATION = '''
 ---
@@ -29,7 +18,8 @@ short_description: Add/remove resource pools to/from vCenter
 description:
     - This module can be used to add/remove a resource pool to/from vCenter
 version_added: 2.3
-author: "Davis Phillips (@dav1x)"
+author:
+- Davis Phillips (@dav1x)
 notes:
     - Tested on vSphere 6.5
 requirements:
@@ -40,38 +30,33 @@ options:
         description:
             - Name of the datacenter to add the host.
         required: True
+        type: str
     cluster:
         description:
             - Name of the cluster to add the host.
         required: True
+        type: str
     resource_pool:
         description:
             - Resource pool name to manage.
         required: True
-    hostname:
-        description:
-            - ESXi hostname to manage.
-        required: True
-    username:
-        description:
-            - ESXi username.
-        required: True
-    password:
-        description:
-            - ESXi password.
-        required: True
+        type: str
     cpu_expandable_reservations:
         description:
             - In a resource pool with an expandable reservation, the reservation on a resource pool can grow beyond the specified value.
         default: True
+        type: bool
     cpu_reservation:
         description:
             - Amount of resource that is guaranteed available to the virtual machine or resource pool.
         default: 0
+        type: int
     cpu_limit:
         description:
             - The utilization of a virtual machine/resource pool will not exceed this limit, even if there are available resources.
-        default: -1 (No limit)
+            - The default value -1 indicates no limit.
+        default: -1
+        type: int
     cpu_shares:
         description:
             - Memory shares are used in case of resource contention.
@@ -80,19 +65,24 @@ options:
             - custom
             - low
             - normal
-        default: Normal
+        default: normal
+        type: str
     mem_expandable_reservations:
         description:
             - In a resource pool with an expandable reservation, the reservation on a resource pool can grow beyond the specified value.
         default: True
+        type: bool
     mem_reservation:
         description:
             - Amount of resource that is guaranteed available to the virtual machine or resource pool.
         default: 0
+        type: int
     mem_limit:
         description:
             - The utilization of a virtual machine/resource pool will not exceed this limit, even if there are available resources.
-        default: -1 (No limit)
+            - The default value -1 indicates no limit.
+        default: -1
+        type: int
     mem_shares:
         description:
             - Memory shares are used in case of resource contention.
@@ -101,7 +91,8 @@ options:
             - custom
             - low
             - normal
-        default: Normal
+        default: normal
+        type: str
     state:
         description:
             - Add or remove the resource pool
@@ -109,28 +100,29 @@ options:
         choices:
             - 'present'
             - 'absent'
+        type: str
 extends_documentation_fragment: vmware.documentation
 '''
 
 EXAMPLES = '''
-# Create a resource pool
-  - name: Add resource pool to vCenter
-    vmware_resource_pool:
-      hostname: vcsa_host
-      username: vcsa_user
-      password: vcsa_pass
-      datacenter: datacenter
-      cluster: cluster
-      resource_pool: resource_pool
-      mem_shares: normal
-      mem_limit: -1
-      mem_reservation: 0
-      mem_expandable_reservations: True
-      cpu_shares: normal
-      cpu_limit: -1
-      cpu_reservation: 0
-      cpu_expandable_reservations: True
-      state: present
+- name: Add resource pool to vCenter
+  vmware_resource_pool:
+    hostname: '{{ vcenter_hostname }}'
+    username: '{{ vcenter_username }}'
+    password: '{{ vcenter_password }}'
+    datacenter: '{{ datacenter_name }}'
+    cluster: '{{ cluster_name }}'
+    resource_pool: '{{ resource_pool_name }}'
+    mem_shares: normal
+    mem_limit: -1
+    mem_reservation: 0
+    mem_expandable_reservations: yes
+    cpu_shares: normal
+    cpu_limit: -1
+    cpu_reservation: 0
+    cpu_expandable_reservations: yes
+    state: present
+  delegate_to: localhost
 '''
 
 RETURN = """
@@ -148,7 +140,7 @@ except ImportError:
     HAS_PYVMOMI = False
 
 from ansible.module_utils.vmware import get_all_objs, connect_to_api, vmware_argument_spec, find_datacenter_by_name, \
-    find_cluster_by_name_datacenter, wait_for_task
+    find_cluster_by_name, wait_for_task, find_host_by_cluster_datacenter
 from ansible.module_utils.basic import AnsibleModule
 
 
@@ -179,17 +171,6 @@ class VMwareResourcePool(object):
         self.resource_pool_obj = None
         self.content = connect_to_api(module)
 
-    def find_host_by_cluster_datacenter(self):
-        self.dc_obj = find_datacenter_by_name(self.content, self.datacenter)
-        self.cluster_obj = find_cluster_by_name_datacenter(
-            self.dc_obj, self.cluster)
-
-        for host in self.cluster_obj.host:
-            if host.name == self.hostname:
-                return host, self.cluster
-
-        return None, self.cluster
-
     def select_resource_pool(self, host):
         pool_obj = None
 
@@ -216,7 +197,6 @@ class VMwareResourcePool(object):
             if name in [c.name, c._GetMoId()]:
                 if return_all is False:
                     return c
-                    break
                 else:
                     obj.append(c)
 
@@ -259,15 +239,13 @@ class VMwareResourcePool(object):
             task = self.resource_pool_obj.Destroy()
             success, result = wait_for_task(task)
 
-        except:
+        except Exception:
             self.module.fail_json(msg="Failed to remove resource pool '%s' '%s'" % (
                 self.resource_pool, resource_pool))
         self.module.exit_json(changed=changed, result=str(result))
 
     def state_add_rp(self):
         changed = True
-        result = None
-        root_resource_pool = None
 
         rp_spec = vim.ResourceConfigSpec()
         cpu_alloc = vim.ResourceAllocationInfo()
@@ -288,16 +266,21 @@ class VMwareResourcePool(object):
         rp_spec.memoryAllocation = mem_alloc
 
         self.dc_obj = find_datacenter_by_name(self.content, self.datacenter)
-        self.cluster_obj = find_cluster_by_name_datacenter(
-            self.dc_obj, self.cluster)
+        if self.dc_obj is None:
+            self.module.fail_json(msg="Unable to find datacenter with name %s" % self.datacenter)
+
+        self.cluster_obj = find_cluster_by_name(self.content, self.cluster, datacenter=self.dc_obj)
+        if self.cluster_obj is None:
+            self.module.fail_json(msg="Unable to find cluster with name %s" % self.cluster)
         rootResourcePool = self.cluster_obj.resourcePool
-        task = rootResourcePool.CreateResourcePool(self.resource_pool, rp_spec)
+        rootResourcePool.CreateResourcePool(self.resource_pool, rp_spec)
 
         self.module.exit_json(changed=changed)
 
     def check_rp_state(self):
 
-        self.host_obj, self.cluster_obj = self.find_host_by_cluster_datacenter()
+        self.host_obj, self.cluster_obj = find_host_by_cluster_datacenter(self.module, self.content, self.datacenter,
+                                                                          self.cluster, self.hostname)
         self.resource_pool_obj = self.select_resource_pool(self.host_obj)
 
         if self.resource_pool_obj is None:
@@ -311,20 +294,16 @@ def main():
     argument_spec.update(dict(datacenter=dict(required=True, type='str'),
                               cluster=dict(required=True, type='str'),
                               resource_pool=dict(required=True, type='str'),
-                              hostname=dict(required=True, type='str'),
-                              username=dict(required=True, type='str'),
-                              password=dict(
-                                  required=True, type='str', no_log=True),
                               mem_shares=dict(type='str', default="normal", choices=[
                                               'high', 'custom', 'normal', 'low']),
-                              mem_limit=dict(type='int', default="-1"),
-                              mem_reservation=dict(type='int', default="0"),
+                              mem_limit=dict(type='int', default=-1),
+                              mem_reservation=dict(type='int', default=0),
                               mem_expandable_reservations=dict(
                                   type='bool', default="True"),
                               cpu_shares=dict(type='str', default="normal", choices=[
                                               'high', 'custom', 'normal', 'low']),
-                              cpu_limit=dict(type='int', default="-1"),
-                              cpu_reservation=dict(type='int', default="0"),
+                              cpu_limit=dict(type='int', default=-1),
+                              cpu_reservation=dict(type='int', default=0),
                               cpu_expandable_reservations=dict(
                                   type='bool', default="True"),
                               state=dict(default='present', choices=['present', 'absent'], type='str')))
@@ -337,6 +316,7 @@ def main():
 
     vmware_rp = VMwareResourcePool(module)
     vmware_rp.process_state()
+
 
 if __name__ == '__main__':
     main()

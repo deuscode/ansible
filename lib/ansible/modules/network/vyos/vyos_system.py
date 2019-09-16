@@ -17,35 +17,37 @@
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
-                    'supported_by': 'community'}
+                    'supported_by': 'network'}
 
 
 DOCUMENTATION = """
 ---
 module: "vyos_system"
 version_added: "2.3"
-author: "Nathaniel Case (@qalthos)"
+author: "Nathaniel Case (@Qalthos)"
 short_description: Run `set system` commands on VyOS devices
 description:
   - Runs one or more commands on remote devices running VyOS.
     This module can also be introspected to validate key parameters before
     returning successfully.
 extends_documentation_fragment: vyos
+notes:
+  - Tested against VyOS 1.1.8 (helium).
+  - This module works with connection C(network_cli). See L(the VyOS OS Platform Options,../network/user_guide/platform_vyos.html).
 options:
-  hostname:
+  host_name:
     description:
       - Configure the device hostname parameter. This option takes an ASCII string value.
   domain_name:
     description:
       - The new domain name to apply to the device.
-  name_server:
+  name_servers:
     description:
       - A list of name servers to use with the device. Mutually exclusive with
         I(domain_search)
-    required: false
-    default: null
+    aliases: ['name_server']
   domain_search:
     description:
       - A list of domain names to search. Mutually exclusive with
@@ -70,7 +72,7 @@ commands:
 EXAMPLES = """
 - name: configure hostname and domain-name
   vyos_system:
-    hostname: vyos01
+    host_name: vyos01
     domain_name: test.example.com
 
 - name: remove all configuration
@@ -79,7 +81,7 @@ EXAMPLES = """
 
 - name: configure name servers
   vyos_system:
-    name_server:
+    name_servers
       - 8.8.8.8
       - 8.8.4.4
 
@@ -91,8 +93,8 @@ EXAMPLES = """
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible.module_utils.vyos import get_config, load_config
-from ansible.module_utils.vyos import vyos_argument_spec, check_args
+from ansible.module_utils.network.vyos.vyos import get_config, load_config
+from ansible.module_utils.network.vyos.vyos import vyos_argument_spec
 
 
 def spec_key_to_device_key(key):
@@ -160,6 +162,7 @@ def spec_to_commands(want, have):
 
     return commands
 
+
 def map_param_to_obj(module):
     return {
         'host_name': module.params['host_name'],
@@ -188,7 +191,6 @@ def main():
     )
 
     warnings = list()
-    check_args(module, warnings)
 
     result = {'changed': False, 'warnings': warnings}
 
@@ -200,7 +202,7 @@ def main():
 
     if commands:
         commit = not module.check_mode
-        response = load_config(module, commands, commit=commit)
+        load_config(module, commands, commit=commit)
         result['changed'] = True
 
     module.exit_json(**result)

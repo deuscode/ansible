@@ -19,11 +19,9 @@
 from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
-import json
-
-from ansible.compat.tests.mock import patch
+from units.compat.mock import patch
 from ansible.modules.network.nxos import nxos_ospf_vrf
-from .nxos_module import TestNxosModule, load_fixture, set_module_args
+from .nxos_module import TestNxosModule, set_module_args
 
 
 class TestNxosOspfVrfModule(TestNxosModule):
@@ -31,6 +29,8 @@ class TestNxosOspfVrfModule(TestNxosModule):
     module = nxos_ospf_vrf
 
     def setUp(self):
+        super(TestNxosOspfVrfModule, self).setUp()
+
         self.mock_load_config = patch('ansible.modules.network.nxos.nxos_ospf_vrf.load_config')
         self.load_config = self.mock_load_config.start()
 
@@ -38,10 +38,11 @@ class TestNxosOspfVrfModule(TestNxosModule):
         self.get_config = self.mock_get_config.start()
 
     def tearDown(self):
+        super(TestNxosOspfVrfModule, self).tearDown()
         self.mock_load_config.stop()
         self.mock_get_config.stop()
 
-    def load_fixtures(self, commands=None):
+    def load_fixtures(self, commands=None, device=''):
         self.load_config.return_value = None
 
     def test_nxos_ospf_vrf_present(self):
@@ -53,17 +54,75 @@ class TestNxosOspfVrfModule(TestNxosModule):
                              timer_throttle_lsa_start=60,
                              timer_throttle_lsa_hold=1100,
                              timer_throttle_lsa_max=3000,
+                             bfd='enable',
                              state='present'))
         result = self.execute_module(changed=True)
         self.assertEqual(sorted(result['commands']),
                          sorted(['router ospf 1',
                                  'vrf test',
                                  'timers throttle lsa 60 1100 3000',
-                                 'ospf 1',
                                  'timers throttle spf 50 1000 2000',
-                                 'vrf test']))
+                                 'bfd',
+                                 ]))
 
     def test_nxos_ospf_vrf_absent(self):
         set_module_args(dict(ospf=1, vrf='test', state='absent'))
         result = self.execute_module(changed=False)
         self.assertEqual(result['commands'], [])
+
+    def test_bfd_1(self):
+        self.get_config.return_value = 'router ospf 1\n  bfd\nrouter ospf 2'
+        # enable -> disable
+        set_module_args(dict(
+            ospf=1,
+            bfd='disable',
+        ))
+        self.execute_module(changed=True, commands=[
+            'router ospf 1',
+            'no bfd',
+        ])
+
+        # disable -> enable
+        set_module_args(dict(
+            ospf=2,
+            bfd='enable',
+        ))
+        self.execute_module(changed=True, commands=[
+            'router ospf 2',
+            'bfd',
+        ])
+
+    def test_bfd_2(self):
+        # enable idempotence
+        self.get_config.return_value = 'router ospf 1\n  bfd\nrouter ospf 2'
+        set_module_args(dict(
+            ospf=1,
+            bfd='enable',
+        ))
+        self.execute_module(changed=False)
+
+        # disable idempotence
+        set_module_args(dict(
+            ospf=2,
+            bfd='disable',
+        ))
+        self.execute_module(changed=False)
+
+    def test_bfd_3(self):
+        # absent tests
+        self.get_config.return_value = 'router ospf 1\n  bfd\nrouter ospf 2'
+        set_module_args(dict(
+            ospf=1,
+            state='absent'
+        ))
+        self.execute_module(changed=True, commands=[
+            'router ospf 1',
+            'no bfd',
+        ])
+
+        # absent w/bfd disable
+        set_module_args(dict(
+            ospf=2,
+            state='absent'
+        ))
+        self.execute_module(changed=False)

@@ -1,20 +1,12 @@
 #!/usr/bin/python
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+# Copyright: Ansible Project
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
+
+
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
 
@@ -27,9 +19,9 @@ description:
   - Creates, deletes, or updates CloudTrail configuration. Ensures logging is also enabled.
 version_added: "2.0"
 author:
-    - "Ansible Core Team"
-    - "Ted Timmons"
-    - "Daniel Shepherd (@shepdelacreme)"
+    - Ansible Core Team
+    - Ted Timmons (@tedder)
+    - Daniel Shepherd (@shepdelacreme)
 requirements:
   - boto3
   - botocore
@@ -44,19 +36,20 @@ options:
   name:
     description:
       - Name for the CloudTrail.
-      - Names are unique per-region unless the CloudTrail is a mulit-region trail, in which case it is unique per-account.
+      - Names are unique per-region unless the CloudTrail is a multi-region trail, in which case it is unique per-account.
     required: true
   enable_logging:
     description:
       - Start or stop the CloudTrail logging. If stopped the trail will be paused and will not record events or deliver log files.
     default: true
+    type: bool
     version_added: "2.4"
   s3_bucket_name:
     description:
       - An existing S3 bucket where CloudTrail will deliver log files.
       - This bucket should exist and have the proper policy.
-      - See U(http://docs.aws.amazon.com/awscloudtrail/latest/userguide/aggregating_logs_regions_bucket_policy.html)
-      - Required when C(state=present)
+      - See U(https://docs.aws.amazon.com/awscloudtrail/latest/userguide/aggregating_logs_regions_bucket_policy.html).
+      - Required when C(state=present).
     version_added: "2.4"
   s3_key_prefix:
     description:
@@ -65,45 +58,42 @@ options:
     description:
       - Specify whether the trail belongs only to one region or exists in all regions.
     default: false
+    type: bool
     version_added: "2.4"
   enable_log_file_validation:
     description:
       - Specifies whether log file integrity validation is enabled.
       - CloudTrail will create a hash for every log file delivered and produce a signed digest file that can be used to ensure log files have not been tampered.
-    default: false
     version_added: "2.4"
+    type: bool
+    aliases: [ "log_file_validation_enabled" ]
   include_global_events:
     description:
       - Record API calls from global services such as IAM and STS.
     default: true
+    type: bool
+    aliases: [ "include_global_service_events" ]
   sns_topic_name:
     description:
-      - SNS Topic name to send notifications to when a log file is delivered
+      - SNS Topic name to send notifications to when a log file is delivered.
     version_added: "2.4"
   cloudwatch_logs_role_arn:
     description:
-      - Specifies a full ARN for an IAM role that assigns the proper permissions for CloudTrail to create and write to the log group listed below.
-      - See U(https://docs.aws.amazon.com/awscloudtrail/latest/userguide/send-cloudtrail-events-to-cloudwatch-logs.html)
-      - "Example arn:aws:iam::123456789012:role/CloudTrail_CloudWatchLogs_Role"
-      - Required when C(cloudwatch_logs_log_group_arn)
+      - Specifies a full ARN for an IAM role that assigns the proper permissions for CloudTrail to create and write to the log group.
+      - See U(https://docs.aws.amazon.com/awscloudtrail/latest/userguide/send-cloudtrail-events-to-cloudwatch-logs.html).
+      - Required when C(cloudwatch_logs_log_group_arn).
     version_added: "2.4"
   cloudwatch_logs_log_group_arn:
     description:
       - A full ARN specifying a valid CloudWatch log group to which CloudTrail logs will be delivered. The log group should already exist.
-      - See U(https://docs.aws.amazon.com/awscloudtrail/latest/userguide/send-cloudtrail-events-to-cloudwatch-logs.html)
-      - "Example arn:aws:logs:us-east-1:123456789012:log-group:CloudTrail/DefaultLogGroup:*"
-      - Required when C(cloudwatch_logs_role_arn)
+      - See U(https://docs.aws.amazon.com/awscloudtrail/latest/userguide/send-cloudtrail-events-to-cloudwatch-logs.html).
+      - Required when C(cloudwatch_logs_role_arn).
     version_added: "2.4"
   kms_key_id:
     description:
       - Specifies the KMS key ID to use to encrypt the logs delivered by CloudTrail. This also has the effect of enabling log file encryption.
       - The value can be an alias name prefixed by "alias/", a fully specified ARN to an alias, a fully specified ARN to a key, or a globally unique identifier.
-      - Examples
-      - alias/MyAliasName
-      - "arn:aws:kms:us-east-1:123456789012:alias/MyAliasName"
-      - "arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012"
-      - 12345678-1234-1234-1234-123456789012
-      - See U(https://docs.aws.amazon.com/awscloudtrail/latest/userguide/encrypting-cloudtrail-log-files-with-aws-kms.html)
+      - See U(https://docs.aws.amazon.com/awscloudtrail/latest/userguide/encrypting-cloudtrail-log-files-with-aws-kms.html).
     version_added: "2.4"
   tags:
     description:
@@ -134,9 +124,20 @@ EXAMPLES = '''
     region: us-east-1
     is_multi_region_trail: true
     enable_log_file_validation: true
+    cloudwatch_logs_role_arn: "arn:aws:iam::123456789012:role/CloudTrail_CloudWatchLogs_Role"
+    cloudwatch_logs_log_group_arn: "arn:aws:logs:us-east-1:123456789012:log-group:CloudTrail/DefaultLogGroup:*"
+    kms_key_id: "alias/MyAliasName"
     tags:
       environment: dev
       Name: default
+
+- name: show another valid kms_key_id
+  cloudtrail:
+    state: present
+    name: default
+    s3_bucket_name: mylogbucket
+    kms_key_id: "arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012"
+    # simply "12345678-1234-1234-1234-123456789012" would be valid too.
 
 - name: pause logging the trail we just created
   cloudtrail:
@@ -172,12 +173,12 @@ trail:
         trail_arn:
             description: Full ARN of the CloudTrail resource
             returned: success
-            type: string
+            type: str
             sample: arn:aws:cloudtrail:us-east-1:123456789012:trail/default
         name:
             description: Name of the CloudTrail resource
             returned: success
-            type: string
+            type: str
             sample: default
         is_logging:
             description: Whether logging is turned on or paused for the Trail
@@ -187,12 +188,12 @@ trail:
         s3_bucket_name:
             description: S3 bucket name where log files are delivered
             returned: success
-            type: string
+            type: str
             sample: myBucket
         s3_key_prefix:
             description: Key prefix in bucket where log files are delivered (if any)
             returned: success when present
-            type: string
+            type: str
             sample: myKeyPrefix
         log_file_validation_enabled:
             description: Whether log file validation is enabled on the trail
@@ -217,32 +218,32 @@ trail:
         home_region:
             description: The home region where the trail was originally created and must be edited.
             returned: success
-            type: string
+            type: str
             sample: us-east-1
         sns_topic_name:
             description: The SNS topic name where log delivery notifications are sent.
             returned: success when present
-            type: string
+            type: str
             sample: myTopic
         sns_topic_arn:
             description: Full ARN of the SNS topic where log delivery notifications are sent.
             returned: success when present
-            type: string
+            type: str
             sample: arn:aws:sns:us-east-1:123456789012:topic/myTopic
         cloud_watch_logs_log_group_arn:
             description: Full ARN of the CloudWatch Logs log group where events are delivered.
             returned: success when present
-            type: string
+            type: str
             sample: arn:aws:logs:us-east-1:123456789012:log-group:CloudTrail/DefaultLogGroup:*
         cloud_watch_logs_role_arn:
             description: Full ARN of the IAM role that CloudTrail assumes to deliver events.
             returned: success when present
-            type: string
+            type: str
             sample: arn:aws:iam::123456789012:role/CloudTrail_CloudWatchLogs_Role
         kms_key_id:
             description: Full ARN of the KMS Key used to encrypt log files.
             returned: success when present
-            type: string
+            type: str
             sample: arn:aws:kms::123456789012:key/12345678-1234-1234-1234-123456789012
         tags:
             description: hash/dictionary of tags applied to this resource
@@ -252,20 +253,24 @@ trail:
 '''
 
 import traceback
+
+try:
+    from botocore.exceptions import ClientError
+except ImportError:
+    # Handled in main() by imported HAS_BOTO3
+    pass
+
 from ansible.module_utils.basic import AnsibleModule
-from ansible.module_utils.ec2 import boto3_conn, ec2_argument_spec
-from ansible.module_utils.ec2 import get_aws_connection_info, HAS_BOTO3
-from ansible.module_utils.ec2 import ansible_dict_to_boto3_tag_list
-from ansible.module_utils.ec2 import boto3_tag_list_to_ansible_dict
-from ansible.module_utils.ec2 import camel_dict_to_snake_dict
-from botocore.exceptions import ClientError
+from ansible.module_utils.ec2 import (boto3_conn, ec2_argument_spec, get_aws_connection_info,
+                                      HAS_BOTO3, ansible_dict_to_boto3_tag_list,
+                                      boto3_tag_list_to_ansible_dict, camel_dict_to_snake_dict)
 
 
 def create_trail(module, client, ct_params):
     """
     Creates a CloudTrail
 
-    module : AnisbleModule object
+    module : AnsibleModule object
     client : boto3 client connection object
     ct_params : The parameters for the Trail to create
     """
@@ -282,7 +287,7 @@ def tag_trail(module, client, tags, trail_arn, curr_tags=None, dry_run=False):
     """
     Creates, updates, removes tags on a CloudTrail resource
 
-    module : AnisbleModule object
+    module : AnsibleModule object
     client : boto3 client connection object
     tags : Dict of tags converted from ansible_dict to boto3 list of dicts
     trail_arn : The ARN of the CloudTrail to operate on
@@ -408,7 +413,7 @@ def delete_trail(module, client, trail_arn):
     """
     Delete a CloudTrail
 
-    module : AnisbleModule object
+    module : AnsibleModule object
     client : boto3 client connection object
     trail_arn : Full CloudTrail ARN
     """
@@ -422,7 +427,7 @@ def update_trail(module, client, ct_params):
     """
     Delete a CloudTrail
 
-    module : AnisbleModule object
+    module : AnsibleModule object
     client : boto3 client connection object
     ct_params : The parameters for the Trail to update
     """
@@ -442,8 +447,8 @@ def main():
         s3_key_prefix=dict(),
         sns_topic_name=dict(),
         is_multi_region_trail=dict(default=False, type='bool'),
-        enable_log_file_validation=dict(default=False, type='bool'),
-        include_global_events=dict(default=True, type='bool'),
+        enable_log_file_validation=dict(type='bool', aliases=['log_file_validation_enabled']),
+        include_global_events=dict(default=True, type='bool', aliases=['include_global_service_events']),
         cloudwatch_logs_role_arn=dict(),
         cloudwatch_logs_log_group_arn=dict(),
         kms_key_id=dict(),
@@ -470,12 +475,6 @@ def main():
         S3BucketName=module.params['s3_bucket_name'],
         IncludeGlobalServiceEvents=module.params['include_global_events'],
         IsMultiRegionTrail=module.params['is_multi_region_trail'],
-        EnableLogFileValidation=module.params['enable_log_file_validation'],
-        S3KeyPrefix='',
-        SnsTopicName='',
-        CloudWatchLogsRoleArn='',
-        CloudWatchLogsLogGroupArn='',
-        KmsKeyId=''
     )
 
     if module.params['s3_key_prefix']:
@@ -489,6 +488,9 @@ def main():
 
     if module.params['cloudwatch_logs_log_group_arn']:
         ct_params['CloudWatchLogsLogGroupArn'] = module.params['cloudwatch_logs_log_group_arn']
+
+    if module.params['enable_log_file_validation'] is not None:
+        ct_params['EnableLogFileValidation'] = module.params['enable_log_file_validation']
 
     if module.params['kms_key_id']:
         ct_params['KmsKeyId'] = module.params['kms_key_id']
@@ -597,7 +599,9 @@ def main():
                 pass
             trail = dict()
             trail.update(ct_params)
-            trail['LogFileValidationEnabled'] = ct_params['EnableLogFileValidation']
+            if 'EnableLogFileValidation' not in ct_params:
+                ct_params['EnableLogFileValidation'] = False
+            trail['EnableLogFileValidation'] = ct_params['EnableLogFileValidation']
             trail.pop('EnableLogFileValidation')
             fake_arn = 'arn:aws:cloudtrail:' + region + ':' + acct_id + ':trail/' + ct_params['Name']
             trail['HasCustomEventSelectors'] = False

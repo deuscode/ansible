@@ -2,23 +2,9 @@
 # -*- coding: utf-8 -*-
 #
 # (c) 2015, René Moser <mail@renemoser.net>
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible. If not, see <http://www.gnu.org/licenses/>.
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['stableinterface'],
                     'supported_by': 'community'}
 
@@ -30,81 +16,79 @@ short_description: Manages projects on Apache CloudStack based clouds.
 description:
     - Create, update, suspend, activate and remove projects.
 version_added: '2.0'
-author: "René Moser (@resmo)"
+author: René Moser (@resmo)
 options:
   name:
     description:
       - Name of the project.
+    type: str
     required: true
   display_text:
     description:
       - Display text of the project.
-      - If not specified, C(name) will be used as C(display_text).
-    required: false
-    default: null
+      - If not specified, I(name) will be used as I(display_text).
+    type: str
   state:
     description:
       - State of the project.
-    required: false
-    default: 'present'
-    choices: [ 'present', 'absent', 'active', 'suspended' ]
+    type: str
+    default: present
+    choices: [ present, absent, active, suspended ]
   domain:
     description:
       - Domain the project is related to.
-    required: false
-    default: null
+    type: str
   account:
     description:
       - Account the project is related to.
-    required: false
-    default: null
+    type: str
   tags:
     description:
-      - List of tags. Tags are a list of dictionaries having keys C(key) and C(value).
-      - "If you want to delete all tags, set a empty list e.g. C(tags: [])."
-    required: false
-    default: null
-    version_added: "2.2"
+      - List of tags. Tags are a list of dictionaries having keys I(key) and I(value).
+      - "If you want to delete all tags, set a empty list e.g. I(tags: [])."
+    type: list
+    aliases: [ tag ]
+    version_added: '2.2'
   poll_async:
     description:
       - Poll async jobs until job has finished.
-    required: false
-    default: true
+    type: bool
+    default: yes
 extends_documentation_fragment: cloudstack
 '''
 
 EXAMPLES = '''
-# Create a project
-- local_action:
-    module: cs_project
+- name: Create a project
+  cs_project:
     name: web
     tags:
       - { key: admin, value: john }
       - { key: foo,   value: bar }
+  delegate_to: localhost
 
-# Rename a project
-- local_action:
-    module: cs_project
+- name: Rename a project
+  cs_project:
     name: web
     display_text: my web project
+  delegate_to: localhost
 
-# Suspend an existing project
-- local_action:
-    module: cs_project
+- name: Suspend an existing project
+  cs_project:
     name: web
     state: suspended
+  delegate_to: localhost
 
-# Activate an existing project
-- local_action:
-    module: cs_project
+- name: Activate an existing project
+  cs_project:
     name: web
     state: active
+  delegate_to: localhost
 
-# Remove a project
-- local_action:
-    module: cs_project
+- name: Remove a project
+  cs_project:
     name: web
     state: absent
+  delegate_to: localhost
 '''
 
 RETURN = '''
@@ -112,44 +96,43 @@ RETURN = '''
 id:
   description: UUID of the project.
   returned: success
-  type: string
+  type: str
   sample: 04589590-ac63-4ffc-93f5-b698b8ac38b6
 name:
   description: Name of the project.
   returned: success
-  type: string
+  type: str
   sample: web project
 display_text:
   description: Display text of the project.
   returned: success
-  type: string
+  type: str
   sample: web project
 state:
   description: State of the project.
   returned: success
-  type: string
+  type: str
   sample: Active
 domain:
   description: Domain the project is related to.
   returned: success
-  type: string
+  type: str
   sample: example domain
 account:
   description: Account the project is related to.
   returned: success
-  type: string
+  type: str
   sample: example account
 tags:
   description: List of resource tags associated with the project.
   returned: success
-  type: dict
+  type: list
   sample: '[ { "key": "foo", "value": "bar" } ]'
 '''
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.cloudstack import (
     AnsibleCloudStack,
-    CloudStackException,
     cs_argument_spec,
     cs_required_together
 )
@@ -163,11 +146,12 @@ class AnsibleCloudStackProject(AnsibleCloudStack):
 
             args = {
                 'account': self.get_account(key='name'),
-                'domainid': self.get_domain(key='id')
+                'domainid': self.get_domain(key='id'),
+                'fetch_list': True,
             }
-            projects = self.cs.listProjects(**args)
+            projects = self.query_api('listProjects', **args)
             if projects:
-                for p in projects['project']:
+                for p in projects:
                     if project.lower() in [p['name'].lower(), p['id']]:
                         self.project = p
                         break
@@ -193,10 +177,7 @@ class AnsibleCloudStackProject(AnsibleCloudStack):
         if self.has_changed(args, project):
             self.result['changed'] = True
             if not self.module.check_mode:
-                project = self.cs.updateProject(**args)
-
-                if 'errortext' in project:
-                    self.module.fail_json(msg="Failed: '%s'" % project['errortext'])
+                project = self.query_api('updateProject', **args)
 
                 poll_async = self.module.params.get('poll_async')
                 if project and poll_async:
@@ -213,10 +194,7 @@ class AnsibleCloudStackProject(AnsibleCloudStack):
             'domainid': self.get_domain('id')
         }
         if not self.module.check_mode:
-            project = self.cs.createProject(**args)
-
-            if 'errortext' in project:
-                self.module.fail_json(msg="Failed: '%s'" % project['errortext'])
+            project = self.query_api('createProject', **args)
 
             poll_async = self.module.params.get('poll_async')
             if project and poll_async:
@@ -234,12 +212,9 @@ class AnsibleCloudStackProject(AnsibleCloudStack):
             }
             if not self.module.check_mode:
                 if state == 'suspended':
-                    project = self.cs.suspendProject(**args)
+                    project = self.query_api('suspendProject', **args)
                 else:
-                    project = self.cs.activateProject(**args)
-
-                if 'errortext' in project:
-                    self.module.fail_json(msg="Failed: '%s'" % project['errortext'])
+                    project = self.query_api('activateProject', **args)
 
                 poll_async = self.module.params.get('poll_async')
                 if project and poll_async:
@@ -255,10 +230,7 @@ class AnsibleCloudStackProject(AnsibleCloudStack):
                 'id': project['id']
             }
             if not self.module.check_mode:
-                res = self.cs.deleteProject(**args)
-
-                if 'errortext' in res:
-                    self.module.fail_json(msg="Failed: '%s'" % res['errortext'])
+                res = self.query_api('deleteProject', **args)
 
                 poll_async = self.module.params.get('poll_async')
                 if res and poll_async:
@@ -284,24 +256,19 @@ def main():
         supports_check_mode=True
     )
 
-    try:
-        acs_project = AnsibleCloudStackProject(module)
+    acs_project = AnsibleCloudStackProject(module)
 
-        state = module.params.get('state')
-        if state in ['absent']:
-            project = acs_project.absent_project()
+    state = module.params.get('state')
+    if state in ['absent']:
+        project = acs_project.absent_project()
 
-        elif state in ['active', 'suspended']:
-            project = acs_project.state_project(state=state)
+    elif state in ['active', 'suspended']:
+        project = acs_project.state_project(state=state)
 
-        else:
-            project = acs_project.present_project()
+    else:
+        project = acs_project.present_project()
 
-        result = acs_project.get_result(project)
-
-    except CloudStackException as e:
-        module.fail_json(msg='CloudStackException: %s' % str(e))
-
+    result = acs_project.get_result(project)
     module.exit_json(**result)
 
 

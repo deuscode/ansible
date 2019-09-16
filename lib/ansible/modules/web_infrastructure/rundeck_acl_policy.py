@@ -1,28 +1,16 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-"""
-Ansible module to manage rundeck ACL policies
-(c) 2017, Loic Blot <loic.blot@unix-experience.fr>
-Sponsored by Infopro Digital. http://www.infopro-digital.com/
-Sponsored by E.T.A.I. http://www.etai.fr/
+# (c) 2017, Loic Blot <loic.blot@unix-experience.fr>
+# Sponsored by Infopro Digital. http://www.infopro-digital.com/
+# Sponsored by E.T.A.I. http://www.etai.fr/
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-This file is part of Ansible
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
 
-Ansible is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
 
-Ansible is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-You should have received a copy of the GNU General Public License
-along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
-"""
-
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
 
@@ -100,13 +88,13 @@ RETURN = '''
 rundeck_response:
     description: Rundeck response when a failure occurs.
     returned: failed
-    type: string
+    type: str
 before:
-    description: dictionnary containing ACL policy informations before modification.
+    description: Dictionary containing ACL policy informations before modification.
     returned: success
     type: dict
 after:
-    description: dictionnary containing ACL policy informations after modification.
+    description: Dictionary containing ACL policy informations after modification.
     returned: success
     type: dict
 '''
@@ -114,6 +102,7 @@ after:
 # import module snippets
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.urls import fetch_url
+from ansible.module_utils._text import to_text
 import json
 
 
@@ -142,9 +131,9 @@ class RundeckACLManager:
         self.handle_http_code_if_needed(info)
         if resp is not None:
             resp = resp.read()
-            if resp != "":
+            if resp != b"":
                 try:
-                    json_resp = json.loads(resp)
+                    json_resp = json.loads(to_text(resp, errors='surrogate_or_strict'))
                     return json_resp, info
                 except ValueError as e:
                     self.module.fail_json(msg="Rundeck response was not a valid JSON. Exception was: %s. "
@@ -231,6 +220,7 @@ def main():
         rundeck.create_or_update_acl()
     elif module.params['state'] == 'absent':
         rundeck.remove_acl()
+
 
 if __name__ == '__main__':
     main()

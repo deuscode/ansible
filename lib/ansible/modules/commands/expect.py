@@ -2,23 +2,13 @@
 # -*- coding: utf-8 -*-
 
 # (c) 2015, Matt Martz <matt@sivel.net>
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
+
+
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
 
@@ -39,28 +29,35 @@ options:
       - The command module takes command to run.
     required: true
   creates:
+    type: path
     description:
       - A filename, when it already exists, this step will B(not) be run.
   removes:
+    type: path
     description:
       - A filename, when it does not exist, this step will B(not) be run.
   chdir:
+    type: path
     description:
       - Change into this directory before running the command.
   responses:
+    type: dict
     description:
       - Mapping of expected string/regex and string to respond with. If the
         response is a list, successive matches return successive
         responses. List functionality is new in 2.1.
     required: true
   timeout:
+    type: int
     description:
-      - Amount of time in seconds to wait for the expected strings.
+      - Amount of time in seconds to wait for the expected strings. Use
+        C(null) to disable timeout.
     default: 30
   echo:
     description:
       - Whether or not to echo out your response strings.
     default: false
+    type: bool
 requirements:
   - python >= 2.6
   - pexpect >= 3.3
@@ -77,15 +74,20 @@ notes:
   - The M(expect) module is designed for simple scenarios. For more complex
     needs, consider the use of expect code with the M(shell) or M(script)
     modules. (An example is part of the M(shell) module documentation)
+seealso:
+- module: script
+- module: shell
 author: "Matt Martz (@sivel)"
 '''
 
 EXAMPLES = r'''
-- name: Case insensitve password string match
+- name: Case insensitive password string match
   expect:
     command: passwd username
     responses:
       (?i)password: "MySekretPa$$word"
+  # you don't want to show passwords in your logs
+  no_log: true
 
 - name: Generic question with multiple different responses
   expect:
@@ -99,16 +101,18 @@ EXAMPLES = r'''
 
 import datetime
 import os
+import traceback
 
+PEXPECT_IMP_ERR = None
 try:
     import pexpect
     HAS_PEXPECT = True
 except ImportError:
+    PEXPECT_IMP_ERR = traceback.format_exc()
     HAS_PEXPECT = False
 
-from ansible.module_utils._text import to_text
-from ansible.module_utils.basic import AnsibleModule
-from ansible.module_utils.pycompat24 import get_exception
+from ansible.module_utils.basic import AnsibleModule, missing_required_lib
+from ansible.module_utils._text import to_native, to_text
 
 
 def response_closure(module, question, responses):
@@ -140,7 +144,8 @@ def main():
     )
 
     if not HAS_PEXPECT:
-        module.fail_json(msg='The pexpect python module is required')
+        module.fail_json(msg=missing_required_lib("pexpect"),
+                         exception=PEXPECT_IMP_ERR)
 
     chdir = module.params['chdir']
     args = module.params['command']
@@ -202,18 +207,16 @@ def main():
             # Use pexpect.runu in pexpect>=3.3,<4
             out, rc = pexpect.runu(args, timeout=timeout, withexitstatus=True,
                                    events=events, cwd=chdir, echo=echo)
-    except (TypeError, AttributeError):
-        e = get_exception()
+    except (TypeError, AttributeError) as e:
         # This should catch all insufficient versions of pexpect
         # We deem them insufficient for their lack of ability to specify
         # to not echo responses via the run/runu functions, which would
-        # potentially leak sensentive information
+        # potentially leak sensitive information
         module.fail_json(msg='Insufficient version of pexpect installed '
                              '(%s), this module requires pexpect>=3.3. '
-                             'Error was %s' % (pexpect.__version__, e))
-    except pexpect.ExceptionPexpect:
-        e = get_exception()
-        module.fail_json(msg='%s' % e)
+                             'Error was %s' % (pexpect.__version__, to_native(e)))
+    except pexpect.ExceptionPexpect as e:
+        module.fail_json(msg='%s' % to_native(e), exception=traceback.format_exc())
 
     endd = datetime.datetime.now()
     delta = endd - startd

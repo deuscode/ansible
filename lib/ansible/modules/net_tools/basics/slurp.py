@@ -2,23 +2,13 @@
 # -*- coding: utf-8 -*-
 
 # (c) 2012, Michael DeHaan <michael.dehaan@gmail.com>
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
+
+
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['stableinterface'],
                     'supported_by': 'core'}
 
@@ -30,16 +20,20 @@ short_description: Slurps a file from remote nodes
 description:
      - This module works like M(fetch). It is used for fetching a base64-
        encoded blob containing the data in a remote file.
+     - This module is also supported for Windows targets.
 options:
   src:
     description:
-      - The file on the remote system to fetch. This I(must) be a file, not a
-        directory.
+      - The file on the remote system to fetch. This I(must) be a file, not a directory.
+    type: path
     required: true
+    aliases: [ path ]
 notes:
    - This module returns an 'in memory' base64 encoded version of the file, take into account that this will require at least twice the RAM as the
      original file size.
-   - "See also: M(fetch)"
+   - This module is also supported for Windows targets.
+seealso:
+- module: fetch
 author:
     - Ansible Core Team
     - Michael DeHaan (@mpdehaan)
@@ -86,7 +80,9 @@ def main():
     if not os.access(source, os.R_OK):
         module.fail_json(msg="file is not readable: %s" % source)
 
-    data = base64.b64encode(open(source, 'rb').read())
+    with open(source, 'rb') as source_fh:
+        source_content = source_fh.read()
+    data = base64.b64encode(source_content)
 
     module.exit_json(content=data, source=source, encoding='base64')
 

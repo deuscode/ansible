@@ -2,23 +2,9 @@
 # -*- coding: utf-8 -*-
 #
 # (c) 2015, René Moser <mail@renemoser.net>
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible. If not, see <http://www.gnu.org/licenses/>.
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['stableinterface'],
                     'supported_by': 'community'}
 
@@ -30,13 +16,12 @@ short_description: Gather facts on instances of Apache CloudStack based clouds.
 description:
      - This module fetches data from the metadata API in CloudStack. The module must be called from within the instance itself.
 version_added: '2.0'
-author: "René Moser (@resmo)"
+author: René Moser (@resmo)
 options:
   filter:
     description:
       - Filter for a specific fact.
-    required: false
-    default: null
+    type: str
     choices:
       - cloudstack_service_offering
       - cloudstack_availability_zone
@@ -46,7 +31,13 @@ options:
       - cloudstack_local_ipv4
       - cloudstack_instance_id
       - cloudstack_user_data
-requirements: [ 'yaml' ]
+  meta_data_host:
+    description:
+      - Host or IP of the meta data API service.
+      - If not set, determination by parsing the dhcp lease file.
+    type: str
+    version_added: '2.4'
+requirements: [ yaml ]
 '''
 
 EXAMPLES = '''
@@ -57,6 +48,12 @@ EXAMPLES = '''
 # Gather specific fact on instances
 - name: Gather cloudstack facts
   cs_facts: filter=cloudstack_instance_id
+
+# Gather specific fact on instances with a given meta_data_host
+- name: Gather cloudstack facts
+  cs_facts:
+    filter: cloudstack_instance_id
+    meta_data_host: 169.254.169.254
 '''
 
 RETURN = '''
@@ -64,37 +61,37 @@ RETURN = '''
 cloudstack_availability_zone:
   description: zone the instance is deployed in.
   returned: success
-  type: string
+  type: str
   sample: ch-gva-2
 cloudstack_instance_id:
   description: UUID of the instance.
   returned: success
-  type: string
+  type: str
   sample: ab4e80b0-3e7e-4936-bdc5-e334ba5b0139
 cloudstack_local_hostname:
   description: local hostname of the instance.
   returned: success
-  type: string
+  type: str
   sample: VM-ab4e80b0-3e7e-4936-bdc5-e334ba5b0139
 cloudstack_local_ipv4:
   description: local IPv4 of the instance.
   returned: success
-  type: string
+  type: str
   sample: 185.19.28.35
 cloudstack_public_hostname:
-  description: public IPv4 of the router. Same as C(cloudstack_public_ipv4).
+  description: public IPv4 of the router. Same as I(cloudstack_public_ipv4).
   returned: success
-  type: string
+  type: str
   sample: VM-ab4e80b0-3e7e-4936-bdc5-e334ba5b0139
 cloudstack_public_ipv4:
   description: public IPv4 of the router.
   returned: success
-  type: string
+  type: str
   sample: 185.19.28.35
 cloudstack_service_offering:
   description: service offering of the instance.
   returned: success
-  type: string
+  type: str
   sample: Micro 512mb 1cpu
 cloudstack_user_data:
   description: data of the instance provided by users.
@@ -104,14 +101,17 @@ cloudstack_user_data:
 '''
 
 import os
-from ansible.module_utils.basic import AnsibleModule
+import traceback
+from ansible.module_utils.basic import AnsibleModule, missing_required_lib
 from ansible.module_utils.urls import fetch_url
-from ansible.module_utils.facts import ansible_facts, module
+from ansible.module_utils.facts import ansible_collector, default_collectors
 
+YAML_IMP_ERR = None
 try:
     import yaml
     HAS_LIB_YAML = True
 except ImportError:
+    YAML_IMP_ERR = traceback.format_exc()
     HAS_LIB_YAML = False
 
 CS_METADATA_BASE_URL = "http://%s/latest/meta-data"
@@ -121,7 +121,12 @@ CS_USERDATA_BASE_URL = "http://%s/latest/user-data"
 class CloudStackFacts(object):
 
     def __init__(self):
-        self.facts = ansible_facts(module)
+        collector = ansible_collector.get_ansible_collector(all_collector_classes=default_collectors.collectors,
+                                                            filter_spec='default_ipv4',
+                                                            gather_subset=['!all', 'network'],
+                                                            gather_timeout=10)
+        self.facts = collector.collect(module)
+
         self.api_ip = None
         self.fact_paths = {
             'cloudstack_service_offering': 'service-offering',
@@ -151,7 +156,7 @@ class CloudStackFacts(object):
         try:
             # this data come form users, we try what we can to parse it...
             return yaml.safe_load(self._fetch(CS_USERDATA_BASE_URL))
-        except:
+        except Exception:
             return None
 
     def _fetch(self, path):
@@ -182,7 +187,9 @@ class CloudStackFacts(object):
 
     def _get_api_ip(self):
         """Return the IP of the DHCP server."""
-        if not self.api_ip:
+        if module.params.get('meta_data_host'):
+            return module.params.get('meta_data_host')
+        elif not self.api_ip:
             dhcp_lease_file = self._get_dhcp_lease_file()
             for line in open(dhcp_lease_file):
                 if 'dhcp-server-identifier' in line:
@@ -209,12 +216,13 @@ def main():
                 'cloudstack_instance_id',
                 'cloudstack_user_data',
             ]),
+            meta_data_host=dict(),
         ),
-        supports_check_mode=False
+        supports_check_mode=True
     )
 
     if not HAS_LIB_YAML:
-        module.fail_json(msg="missing python library: yaml")
+        module.fail_json(msg=missing_required_lib("PyYAML"), exception=YAML_IMP_ERR)
 
     cs_facts = CloudStackFacts().run()
     cs_facts_result = dict(changed=False, ansible_facts=cs_facts)

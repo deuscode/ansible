@@ -19,13 +19,16 @@
 from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
-from ansible.compat.tests import unittest
-from ansible.compat.tests.mock import patch, MagicMock
-from ansible.errors import AnsibleError, AnsibleParserError
-from ansible.executor.task_executor import TaskExecutor
-from ansible.playbook.play_context import PlayContext
-from ansible.plugins import action_loader, lookup_loader
+import mock
+
+from units.compat import unittest
+from units.compat.mock import patch, MagicMock
+from ansible.errors import AnsibleError
+from ansible.executor.task_executor import TaskExecutor, remove_omit
+from ansible.plugins.loader import action_loader, lookup_loader
 from ansible.parsing.yaml.objects import AnsibleUnicode
+from ansible.utils.unsafe_proxy import AnsibleUnsafeText, AnsibleUnsafeBytes
+from ansible.module_utils.six import text_type
 
 from units.mock.loader import DictDataLoader
 
@@ -55,7 +58,7 @@ class TestTaskExecutor(unittest.TestCase):
             new_stdin=new_stdin,
             loader=fake_loader,
             shared_loader_obj=mock_shared_loader,
-            rslt_q=mock_queue,
+            final_q=mock_queue,
         )
 
     def test_task_executor_run(self):
@@ -82,7 +85,7 @@ class TestTaskExecutor(unittest.TestCase):
             new_stdin=new_stdin,
             loader=fake_loader,
             shared_loader_obj=mock_shared_loader,
-            rslt_q=mock_queue,
+            final_q=mock_queue,
         )
 
         te._get_loop_items = MagicMock(return_value=None)
@@ -100,14 +103,36 @@ class TestTaskExecutor(unittest.TestCase):
         res = te.run()
         self.assertIn("failed", res)
 
+    def test_task_executor_run_clean_res(self):
+        te = TaskExecutor(None, MagicMock(), None, None, None, None, None, None)
+        te._get_loop_items = MagicMock(return_value=[1])
+        te._run_loop = MagicMock(
+            return_value=[
+                {
+                    'unsafe_bytes': AnsibleUnsafeBytes(b'{{ $bar }}'),
+                    'unsafe_text': AnsibleUnsafeText(u'{{ $bar }}'),
+                    'bytes': b'bytes',
+                    'text': u'text',
+                    'int': 1,
+                }
+            ]
+        )
+        res = te.run()
+        data = res['results'][0]
+        self.assertIsInstance(data['unsafe_bytes'], AnsibleUnsafeText)
+        self.assertIsInstance(data['unsafe_text'], AnsibleUnsafeText)
+        self.assertIsInstance(data['bytes'], text_type)
+        self.assertIsInstance(data['text'], text_type)
+        self.assertIsInstance(data['int'], int)
+
     def test_task_executor_get_loop_items(self):
         fake_loader = DictDataLoader({})
 
         mock_host = MagicMock()
 
         mock_task = MagicMock()
-        mock_task.loop = 'items'
-        mock_task.loop_args = ['a', 'b', 'c']
+        mock_task.loop_with = 'items'
+        mock_task.loop = ['a', 'b', 'c']
 
         mock_play_context = MagicMock()
 
@@ -126,7 +151,7 @@ class TestTaskExecutor(unittest.TestCase):
             new_stdin=new_stdin,
             loader=fake_loader,
             shared_loader_obj=mock_shared_loader,
-            rslt_q=mock_queue,
+            final_q=mock_queue,
         )
 
         items = te._get_loop_items()
@@ -162,7 +187,7 @@ class TestTaskExecutor(unittest.TestCase):
             new_stdin=new_stdin,
             loader=fake_loader,
             shared_loader_obj=mock_shared_loader,
-            rslt_q=mock_queue,
+            final_q=mock_queue,
         )
 
         def _execute(variables):
@@ -208,7 +233,7 @@ class TestTaskExecutor(unittest.TestCase):
             new_stdin=new_stdin,
             loader=fake_loader,
             shared_loader_obj=mock_shared_loader,
-            rslt_q=mock_queue,
+            final_q=mock_queue,
         )
 
         # No replacement
@@ -356,6 +381,108 @@ class TestTaskExecutor(unittest.TestCase):
         self.assertEqual(new_items, items)
         self.assertEqual(mock_task.args, {'name': '{{item.name}}', 'state': '{{item.state}}'})
 
+    def test_task_executor_get_action_handler(self):
+        te = TaskExecutor(
+            host=MagicMock(),
+            task=MagicMock(),
+            job_vars={},
+            play_context=MagicMock(),
+            new_stdin=None,
+            loader=DictDataLoader({}),
+            shared_loader_obj=MagicMock(),
+            final_q=MagicMock(),
+        )
+
+        action_loader = te._shared_loader_obj.action_loader
+        action_loader.has_plugin.return_value = True
+        action_loader.get.return_value = mock.sentinel.handler
+
+        mock_connection = MagicMock()
+        mock_templar = MagicMock()
+        action = 'namespace.prefix_sufix'
+        te._task.action = action
+
+        handler = te._get_action_handler(mock_connection, mock_templar)
+
+        self.assertIs(mock.sentinel.handler, handler)
+
+        action_loader.has_plugin.assert_called_once_with(
+            action, collection_list=te._task.collections)
+
+        action_loader.get.assert_called_once_with(
+            te._task.action, task=te._task, connection=mock_connection,
+            play_context=te._play_context, loader=te._loader,
+            templar=mock_templar, shared_loader_obj=te._shared_loader_obj,
+            collection_list=te._task.collections)
+
+    def test_task_executor_get_handler_prefix(self):
+        te = TaskExecutor(
+            host=MagicMock(),
+            task=MagicMock(),
+            job_vars={},
+            play_context=MagicMock(),
+            new_stdin=None,
+            loader=DictDataLoader({}),
+            shared_loader_obj=MagicMock(),
+            final_q=MagicMock(),
+        )
+
+        action_loader = te._shared_loader_obj.action_loader
+        action_loader.has_plugin.return_value = False
+        action_loader.get.return_value = mock.sentinel.handler
+        action_loader.__contains__.return_value = True
+
+        mock_connection = MagicMock()
+        mock_templar = MagicMock()
+        action = 'namespace.netconf_sufix'
+        te._task.action = action
+
+        handler = te._get_action_handler(mock_connection, mock_templar)
+
+        self.assertIs(mock.sentinel.handler, handler)
+        action_loader.has_plugin.assert_called_once_with(
+            action, collection_list=te._task.collections)
+
+        action_loader.get.assert_called_once_with(
+            'netconf', task=te._task, connection=mock_connection,
+            play_context=te._play_context, loader=te._loader,
+            templar=mock_templar, shared_loader_obj=te._shared_loader_obj,
+            collection_list=te._task.collections)
+
+    def test_task_executor_get_handler_normal(self):
+        te = TaskExecutor(
+            host=MagicMock(),
+            task=MagicMock(),
+            job_vars={},
+            play_context=MagicMock(),
+            new_stdin=None,
+            loader=DictDataLoader({}),
+            shared_loader_obj=MagicMock(),
+            final_q=MagicMock(),
+        )
+
+        action_loader = te._shared_loader_obj.action_loader
+        action_loader.has_plugin.return_value = False
+        action_loader.get.return_value = mock.sentinel.handler
+        action_loader.__contains__.return_value = False
+
+        mock_connection = MagicMock()
+        mock_templar = MagicMock()
+        action = 'namespace.prefix_sufix'
+        te._task.action = action
+
+        handler = te._get_action_handler(mock_connection, mock_templar)
+
+        self.assertIs(mock.sentinel.handler, handler)
+        action_loader.has_plugin.assert_called_once_with(
+            action, collection_list=te._task.collections)
+
+        action_loader.get.assert_called_once_with(
+            'normal', task=te._task, connection=mock_connection,
+            play_context=te._play_context, loader=te._loader,
+            templar=mock_templar, shared_loader_obj=te._shared_loader_obj,
+            collection_list=None)
+
     def test_task_executor_execute(self):
         fake_loader = DictDataLoader({})
 
@@ -370,11 +497,11 @@ class TestTaskExecutor(unittest.TestCase):
         mock_task.changed_when = None
         mock_task.failed_when = None
         mock_task.post_validate.return_value = None
-        # mock_task.async cannot be left unset, because on Python 3 MagicMock()
+        # mock_task.async_val cannot be left unset, because on Python 3 MagicMock()
         # > 0 raises a TypeError   There are two reasons for using the value 1
         # here: on Python 2 comparing MagicMock() > 0 returns True, and the
         # other reason is that if I specify 0 here, the test fails. ;)
-        mock_task.async = 1
+        mock_task.async_val = 1
         mock_task.poll = 0
 
         mock_play_context = MagicMock()
@@ -400,7 +527,7 @@ class TestTaskExecutor(unittest.TestCase):
             new_stdin=new_stdin,
             loader=fake_loader,
             shared_loader_obj=shared_loader,
-            rslt_q=mock_queue,
+            final_q=mock_queue,
         )
 
         te._get_connection = MagicMock(return_value=mock_connection)
@@ -431,7 +558,7 @@ class TestTaskExecutor(unittest.TestCase):
         mock_host = MagicMock()
 
         mock_task = MagicMock()
-        mock_task.async = 0.1
+        mock_task.async_val = 0.1
         mock_task.poll = 0.05
 
         mock_play_context = MagicMock()
@@ -455,7 +582,7 @@ class TestTaskExecutor(unittest.TestCase):
             new_stdin=new_stdin,
             loader=fake_loader,
             shared_loader_obj=shared_loader,
-            rslt_q=mock_queue,
+            final_q=mock_queue,
         )
 
         te._connection = MagicMock()
@@ -484,3 +611,50 @@ class TestTaskExecutor(unittest.TestCase):
             mock_templar = MagicMock()
             res = te._poll_async_result(result=dict(ansible_job_id=1), templar=mock_templar)
             self.assertEqual(res, dict(finished=1))
+
+    def test_recursive_remove_omit(self):
+        omit_token = 'POPCORN'
+
+        data = {
+            'foo': 'bar',
+            'baz': 1,
+            'qux': ['one', 'two', 'three'],
+            'subdict': {
+                'remove': 'POPCORN',
+                'keep': 'not_popcorn',
+                'subsubdict': {
+                    'remove': 'POPCORN',
+                    'keep': 'not_popcorn',
+                },
+                'a_list': ['POPCORN'],
+            },
+            'a_list': ['POPCORN'],
+            'list_of_lists': [
+                ['some', 'thing'],
+            ],
+            'list_of_dicts': [
+                {
+                    'remove': 'POPCORN',
+                }
+            ],
+        }
+
+        expected = {
+            'foo': 'bar',
+            'baz': 1,
+            'qux': ['one', 'two', 'three'],
+            'subdict': {
+                'keep': 'not_popcorn',
+                'subsubdict': {
+                    'keep': 'not_popcorn',
+                },
+                'a_list': ['POPCORN'],
+            },
+            'a_list': ['POPCORN'],
+            'list_of_lists': [
+                ['some', 'thing'],
+            ],
+            'list_of_dicts': [{}],
+        }
+
+        self.assertEqual(remove_omit(data, omit_token), expected)

@@ -16,9 +16,9 @@
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
-                    'supported_by': 'community'}
+                    'supported_by': 'network'}
 
 
 DOCUMENTATION = '''
@@ -32,6 +32,7 @@ description:
 author:
     - Jason Edelman (@jedelman8)
 notes:
+    - Tested against NXOSv 7.3.(0)D1(1) on VIRL
     - Authentication parameters not idempotent.
 options:
     user:
@@ -41,33 +42,34 @@ options:
     group:
         description:
             - Group to which the user will belong to.
-        required: true
-    auth:
+              If state = present, and the user is existing,
+              the group is added to the user. If the user
+              is not existing, user entry is created with this
+              group argument.
+              If state = absent, only the group is removed from the
+              user entry. However, to maintain backward compatibility,
+              if the existing user belongs to only one group, and if
+              group argument is same as the existing user's group,
+              then the user entry also is deleted.
+    authentication:
         description:
-            - Auth parameters for the user.
-        required: false
-        default: null
+            - Authentication parameters for the user.
         choices: ['md5', 'sha']
     pwd:
         description:
-            - Auth password when using md5 or sha.
-        required: false
-        default: null
+            - Authentication password when using md5 or sha.
+              This is not idempotent
     privacy:
         description:
             - Privacy password for the user.
-        required: false
-        default: null
+              This is not idempotent
     encrypt:
         description:
             - Enables AES-128 bit encryption when using privacy password.
-        required: false
-        default: null
-        choices: ['true','false']
+        type: bool
     state:
         description:
             - Manage the state of the resource.
-        required: false
         default: present
         choices: ['present','absent']
 '''
@@ -76,64 +78,34 @@ EXAMPLES = '''
 - nxos_snmp_user:
     user: ntc
     group: network-operator
-    auth: md5
+    authentication: md5
     pwd: test_password
-    host: "{{ inventory_hostname }}"
-    username: "{{ un }}"
-    password: "{{ pwd }}"
 '''
 
 RETURN = '''
-proposed:
-    description: k/v pairs of parameters passed into module
-    returned: always
-    type: dict
-    sample: {"authentication": "md5", "group": "network-operator",
-            "pwd": "test_password", "user": "ntc"}
-existing:
-    description:
-        - k/v pairs of existing configuration
-    returned: always
-    type: dict
-    sample: {"authentication": "no", "encrypt": "none",
-             "group": ["network-operator"], "user": "ntc"}
-end_state:
-    description: k/v pairs configuration vtp after module execution
-    returned: always
-    type: dict
-    sample: {"authentication": "md5", "encrypt": "none",
-             "group": ["network-operator"], "user": "ntc"}
-updates:
-    description: command sent to the device
+commands:
+    description: commands sent to the device
     returned: always
     type: list
     sample: ["snmp-server user ntc network-operator auth md5 test_password"]
-changed:
-    description: check to see if a change was made on the device
-    returned: always
-    type: boolean
-    sample: true
 '''
-from ansible.module_utils.nxos import get_config, load_config, run_commands
-from ansible.module_utils.nxos import nxos_argument_spec, check_args
+
+import re
+
+from ansible.module_utils.network.nxos.nxos import load_config, run_commands
+from ansible.module_utils.network.nxos.nxos import nxos_argument_spec, check_args
 from ansible.module_utils.basic import AnsibleModule
 
 
-import re
-import re
+def execute_show_command(command, module, text=False):
+    command = {
+        'command': command,
+        'output': 'json',
+    }
+    if text:
+        command['output'] = 'text'
 
-
-def execute_show_command(command, module, command_type='cli_show', text=False):
-    if module.params['transport'] == 'cli':
-        if 'show run' not in command and text is False:
-            command += ' | json'
-        cmds = [command]
-        body = run_commands(module, cmds)
-    elif module.params['transport'] == 'nxapi':
-        cmds = [command]
-        body = run_commands(module, cmds)
-
-    return body
+    return run_commands(module, command)
 
 
 def flatten_list(command_lists):
@@ -147,73 +119,155 @@ def flatten_list(command_lists):
 
 
 def get_snmp_groups(module):
-    command = 'show snmp group'
-    body = execute_show_command(command, module)
-    g_list = []
+    data = execute_show_command('show snmp group', module)[0]
+    group_list = []
 
     try:
-        group_table = body[0]['TABLE_role']['ROW_role']
-        for each in group_table:
-            g_list.append(each['role_name'])
+        group_table = data['TABLE_role']['ROW_role']
+        for group in group_table:
+            group_list.append(group['role_name'])
+    except (KeyError, AttributeError):
+        return group_list
 
-    except (KeyError, AttributeError, IndexError):
-        return g_list
-
-    return g_list
+    return group_list
 
 
 def get_snmp_user(user, module):
     command = 'show snmp user {0}'.format(user)
     body = execute_show_command(command, module, text=True)
+    body_text = body[0]
 
     if 'No such entry' not in body[0]:
         body = execute_show_command(command, module)
 
     resource = {}
-    group_list = []
     try:
-        resource_table = body[0]['TABLE_snmp_users']['ROW_snmp_users']
-        resource['user'] = str(resource_table['user'])
-        resource['authentication'] = str(resource_table['auth']).strip()
-        encrypt = str(resource_table['priv']).strip()
+        # The TABLE and ROW keys differ between NXOS platforms.
+        if body[0].get('TABLE_snmp_user'):
+            tablekey = 'TABLE_snmp_user'
+            rowkey = 'ROW_snmp_user'
+            tablegrpkey = 'TABLE_snmp_group_names'
+            rowgrpkey = 'ROW_snmp_group_names'
+            authkey = 'auth_protocol'
+            privkey = 'priv_protocol'
+            grpkey = 'group_names'
+        elif body[0].get('TABLE_snmp_users'):
+            tablekey = 'TABLE_snmp_users'
+            rowkey = 'ROW_snmp_users'
+            tablegrpkey = 'TABLE_groups'
+            rowgrpkey = 'ROW_groups'
+            authkey = 'auth'
+            privkey = 'priv'
+            grpkey = 'group'
+
+        rt = body[0][tablekey][rowkey]
+        # on some older platforms, all groups except the 1st one
+        # are in list elements by themselves and they are
+        # indexed by 'user'. This is due to a platform bug.
+        # Get first element if rt is a list due to the bug
+        # or if there is no bug, parse rt directly
+        if isinstance(rt, list):
+            resource_table = rt[0]
+        else:
+            resource_table = rt
+
+        resource['user'] = user
+        resource['authentication'] = str(resource_table[authkey]).strip()
+        encrypt = str(resource_table[privkey]).strip()
         if encrypt.startswith('aes'):
             resource['encrypt'] = 'aes-128'
         else:
             resource['encrypt'] = 'none'
 
-        group_table = resource_table['TABLE_groups']['ROW_groups']
-
         groups = []
-        try:
-            for group in group_table:
-                groups.append(str(group['group']).strip())
-        except TypeError:
-            groups.append(str(group_table['group']).strip())
+        if tablegrpkey in resource_table:
+            group_table = resource_table[tablegrpkey][rowgrpkey]
+            try:
+                for group in group_table:
+                    groups.append(str(group[grpkey]).strip())
+            except TypeError:
+                groups.append(str(group_table[grpkey]).strip())
+
+            # Now for the platform bug case, get the groups
+            if isinstance(rt, list):
+                # remove 1st element from the list as this is parsed already
+                rt.pop(0)
+                # iterate through other elements indexed by
+                # 'user' and add it to groups.
+                for each in rt:
+                    groups.append(each['user'].strip())
+
+        # Some 'F' platforms use 'group' key instead
+        elif 'group' in resource_table:
+            # single group is a string, multiple groups in a list
+            groups = resource_table['group']
+            if isinstance(groups, str):
+                groups = [groups]
 
         resource['group'] = groups
 
     except (KeyError, AttributeError, IndexError, TypeError):
-        return resource
+        if not resource and body_text and 'No such entry' not in body_text:
+            # 6K and other platforms may not return structured output;
+            # attempt to get state from text output
+            resource = get_non_structured_snmp_user(body_text)
 
     return resource
 
 
-def remove_snmp_user(user):
-    return ['no snmp-server user {0}'.format(user)]
+def get_non_structured_snmp_user(body_text):
+    # This method is a workaround for platforms that don't support structured
+    # output for 'show snmp user <foo>'. This workaround may not work on all
+    # platforms. Sample non-struct output:
+    #
+    # User                Auth  Priv(enforce) Groups              acl_filter
+    # ____                ____  _____________ ______              __________
+    # sample1             no    no            network-admin       ipv4:my_acl
+    #                                         network-operator
+    #                                         priv-11
+    #         -OR-
+    # sample2             md5   des(no)       priv-15
+    #         -OR-
+    # sample3             md5   aes-128(no)   network-admin
+    resource = {}
+    output = body_text.rsplit('__________')[-1]
+    pat = re.compile(r'^(?P<user>\S+)\s+'
+                     r'(?P<auth>\S+)\s+'
+                     r'(?P<priv>[\w\d-]+)(?P<enforce>\([\w\d-]+\))*\s+'
+                     r'(?P<group>\S+)',
+                     re.M)
+    m = re.search(pat, output)
+    if not m:
+        return resource
+    resource['user'] = m.group('user')
+    resource['auth'] = m.group('auth')
+    resource['encrypt'] = 'aes-128' if 'aes' in str(m.group('priv')) else 'none'
+
+    resource['group'] = [m.group('group')]
+    more_groups = re.findall(r'^\s+([\w\d-]+)\s*$', output, re.M)
+    if more_groups:
+        resource['group'] += more_groups
+
+    return resource
 
 
-def config_snmp_user(proposed, user, reset, new):
-    if reset and not new:
+def remove_snmp_user(user, group=None):
+    if group:
+        return ['no snmp-server user {0} {1}'.format(user, group)]
+    else:
+        return ['no snmp-server user {0}'.format(user)]
+
+
+def config_snmp_user(proposed, user, reset):
+    if reset:
         commands = remove_snmp_user(user)
     else:
         commands = []
 
-    group = proposed.get('group', None)
-
-    cmd = ''
-
-    if group:
+    if proposed.get('group'):
         cmd = 'snmp-server user {0} {group}'.format(user, **proposed)
+    else:
+        cmd = 'snmp-server user {0}'.format(user)
 
     auth = proposed.get('authentication', None)
     pwd = proposed.get('pwd', None)
@@ -238,7 +292,7 @@ def config_snmp_user(proposed, user, reset, new):
 def main():
     argument_spec = dict(
         user=dict(required=True, type='str'),
-        group=dict(type='str', required=True),
+        group=dict(type='str'),
         pwd=dict(type='str'),
         privacy=dict(type='str'),
         authentication=dict(choices=['md5', 'sha']),
@@ -249,13 +303,13 @@ def main():
     argument_spec.update(nxos_argument_spec)
 
     module = AnsibleModule(argument_spec=argument_spec,
-                                required_together=[['authentication', 'pwd'],
-                                                  ['encrypt', 'privacy']],
-                                supports_check_mode=True)
+                           required_together=[['authentication', 'pwd'],
+                                              ['encrypt', 'privacy']],
+                           supports_check_mode=True)
 
     warnings = list()
     check_args(module, warnings)
-
+    results = {'changed': False, 'commands': [], 'warnings': warnings}
 
     user = module.params['user']
     group = module.params['group']
@@ -274,24 +328,29 @@ def main():
         module.fail_json(msg='group not configured yet on switch.')
 
     existing = get_snmp_user(user, module)
-    end_state = existing
 
-    store = existing.get('group', None)
-    if existing:
-        if group not in existing['group']:
-            existing['group'] = None
+    if state == 'present' and existing:
+        if group:
+            if group not in existing['group']:
+                existing['group'] = None
+            else:
+                existing['group'] = group
         else:
-            existing['group'] = group
+            existing['group'] = None
 
-    changed = False
     commands = []
-    proposed = {}
 
     if state == 'absent' and existing:
-        commands.append(remove_snmp_user(user))
+        if group:
+            if group in existing['group']:
+                if len(existing['group']) == 1:
+                    commands.append(remove_snmp_user(user))
+                else:
+                    commands.append(remove_snmp_user(user, group))
+        else:
+            commands.append(remove_snmp_user(user))
 
     elif state == 'present':
-        new = False
         reset = False
 
         args = dict(user=user, pwd=pwd, group=group, privacy=privacy,
@@ -301,53 +360,37 @@ def main():
         if not existing:
             if encrypt:
                 proposed['encrypt'] = 'aes-128'
-            commands.append(config_snmp_user(proposed, user, reset, new))
+            commands.append(config_snmp_user(proposed, user, reset))
 
         elif existing:
             if encrypt and not existing['encrypt'].startswith('aes'):
                 reset = True
                 proposed['encrypt'] = 'aes-128'
 
-            elif encrypt:
-                proposed['encrypt'] = 'aes-128'
-
-            delta = dict(
-                set(proposed.items()).difference(existing.items()))
+            delta = dict(set(proposed.items()).difference(existing.items()))
 
             if delta.get('pwd'):
                 delta['authentication'] = authentication
 
-            if delta:
-                delta['group'] = group
+            if delta and encrypt:
+                delta['encrypt'] = 'aes-128'
 
-            command = config_snmp_user(delta, user, reset, new)
-            commands.append(command)
+            if delta:
+                command = config_snmp_user(delta, user, reset)
+                commands.append(command)
 
     cmds = flatten_list(commands)
-    results = {}
     if cmds:
-        if module.check_mode:
-            module.exit_json(changed=True, commands=cmds)
-        else:
-            changed = True
+        results['changed'] = True
+        if not module.check_mode:
             load_config(module, cmds)
-            end_state = get_snmp_user(user, module)
-            if 'configure' in cmds:
-                cmds.pop(0)
 
-    if store:
-        existing['group'] = store
-
-    results['proposed'] = proposed
-    results['existing'] = existing
-    results['updates'] = cmds
-    results['changed'] = changed
-    results['warnings'] = warnings
-    results['end_state'] = end_state
+        if 'configure' in cmds:
+            cmds.pop(0)
+        results['commands'] = cmds
 
     module.exit_json(**results)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
-

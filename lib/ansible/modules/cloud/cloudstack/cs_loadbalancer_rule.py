@@ -3,23 +3,9 @@
 #
 # (c) 2015, Darren Worrall <darren@iweb.co.uk>
 # (c) 2015, René Moser <mail@renemoser.net>
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible. If not, see <http://www.gnu.org/licenses/>.
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['stableinterface'],
                     'supported_by': 'community'}
 
@@ -32,115 +18,130 @@ description:
     - Add, update and remove load balancer rules.
 version_added: '2.0'
 author:
-    - "Darren Worrall (@dazworrall)"
-    - "René Moser (@resmo)"
+    - Darren Worrall (@dazworrall)
+    - René Moser (@resmo)
 options:
   name:
     description:
       - The name of the load balancer rule.
+    type: str
     required: true
   description:
     description:
       - The description of the load balancer rule.
-    required: false
-    default: null
+    type: str
   algorithm:
     description:
       - Load balancer algorithm
-      - Required when using C(state=present).
-    required: false
-    choices: [ 'source', 'roundrobin', 'leastconn' ]
-    default: 'source'
+      - Required when using I(state=present).
+    type: str
+    choices: [ source, roundrobin, leastconn ]
+    default: source
   private_port:
     description:
       - The private port of the private ip address/virtual machine where the network traffic will be load balanced to.
-      - Required when using C(state=present).
+      - Required when using I(state=present).
       - Can not be changed once the rule exists due API limitation.
-    required: false
-    default: null
+    type: int
   public_port:
     description:
       - The public port from where the network traffic will be load balanced from.
-      - Required when using C(state=present).
+      - Required when using I(state=present).
       - Can not be changed once the rule exists due API limitation.
+    type: int
     required: true
-    default: null
   ip_address:
     description:
       - Public IP address from where the network traffic will be load balanced from.
+    type: str
     required: true
-    aliases: [ 'public_ip' ]
+    aliases: [ public_ip ]
   open_firewall:
     description:
       - Whether the firewall rule for public port should be created, while creating the new rule.
       - Use M(cs_firewall) for managing firewall rules.
-    required: false
-    default: false
+    type: bool
+    default: no
   cidr:
     description:
       - CIDR (full notation) to be used for firewall rule if required.
-    required: false
-    default: null
+    type: str
   protocol:
     description:
       - The protocol to be used on the load balancer
-    required: false
-    default: null
+    type: str
   project:
     description:
       - Name of the project the load balancer IP address is related to.
-    required: false
-    default: null
+    type: str
   state:
     description:
       - State of the rule.
-    required: true
-    default: 'present'
-    choices: [ 'present', 'absent' ]
+    type: str
+    default: present
+    choices: [ present, absent ]
   domain:
     description:
       - Domain the rule is related to.
-    required: false
-    default: null
+    type: str
   account:
     description:
       - Account the rule is related to.
-    required: false
-    default: null
+    type: str
   zone:
     description:
       - Name of the zone in which the rule should be created.
       - If not set, default zone is used.
-    required: false
-    default: null
+    type: str
+  poll_async:
+    description:
+      - Poll async jobs until job has finished.
+    type: bool
+    default: yes
+  tags:
+    description:
+      - List of tags. Tags are a list of dictionaries having keys I(key) and I(value).
+      - "To delete all tags, set a empty list e.g. I(tags: [])."
+    type: list
+    aliases: [ tag ]
+  network:
+    description:
+      - Name of the network.
+    type: str
+    version_added: '2.9'
+  vpc:
+    description:
+      - Name of the VPC.
+    type: str
+    version_added: '2.9'
 extends_documentation_fragment: cloudstack
 '''
 
 EXAMPLES = '''
-# Create a load balancer rule
-- local_action:
-    module: cs_loadbalancer_rule
+- name: Create a load balancer rule
+  cs_loadbalancer_rule:
     name: balance_http
     public_ip: 1.2.3.4
     algorithm: leastconn
     public_port: 80
     private_port: 8080
+  delegate_to: localhost
 
-# update algorithm of an existing load balancer rule
-- local_action:
-    module: cs_loadbalancer_rule
+- name: Update algorithm of an existing load balancer rule
+  cs_loadbalancer_rule:
     name: balance_http
     public_ip: 1.2.3.4
     algorithm: roundrobin
     public_port: 80
     private_port: 8080
+  delegate_to: localhost
 
-# Delete a load balancer rule
-- local_action:
-    module: cs_loadbalancer_rule
+- name: Delete a load balancer rule
+  cs_loadbalancer_rule:
     name: balance_http
     public_ip: 1.2.3.4
     state: absent
+  delegate_to: localhost
 '''
 
 RETURN = '''
@@ -148,84 +149,83 @@ RETURN = '''
 id:
   description: UUID of the rule.
   returned: success
-  type: string
+  type: str
   sample: a6f7a5fc-43f8-11e5-a151-feff819cdc9f
 zone:
   description: Name of zone the rule is related to.
   returned: success
-  type: string
+  type: str
   sample: ch-gva-2
 project:
   description: Name of project the rule is related to.
   returned: success
-  type: string
+  type: str
   sample: Production
 account:
   description: Account the rule is related to.
   returned: success
-  type: string
+  type: str
   sample: example account
 domain:
   description: Domain the rule is related to.
   returned: success
-  type: string
+  type: str
   sample: example domain
 algorithm:
   description: Load balancer algorithm used.
   returned: success
-  type: string
-  sample: "source"
+  type: str
+  sample: source
 cidr:
   description: CIDR to forward traffic from.
   returned: success
-  type: string
-  sample: ""
+  type: str
+  sample: 0.0.0.0/0
 name:
   description: Name of the rule.
   returned: success
-  type: string
-  sample: "http-lb"
+  type: str
+  sample: http-lb
 description:
   description: Description of the rule.
   returned: success
-  type: string
-  sample: "http load balancer rule"
+  type: str
+  sample: http load balancer rule
 protocol:
   description: Protocol of the rule.
   returned: success
-  type: string
-  sample: "tcp"
+  type: str
+  sample: tcp
 public_port:
   description: Public port.
   returned: success
-  type: string
+  type: int
   sample: 80
 private_port:
   description: Private IP address.
   returned: success
-  type: string
+  type: int
   sample: 80
 public_ip:
   description: Public IP address.
   returned: success
-  type: string
-  sample: "1.2.3.4"
+  type: str
+  sample: 1.2.3.4
 tags:
   description: List of resource tags associated with the rule.
   returned: success
-  type: dict
+  type: list
   sample: '[ { "key": "foo", "value": "bar" } ]'
 state:
   description: State of the rule.
   returned: success
-  type: string
-  sample: "Add"
+  type: str
+  sample: Add
 '''
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.cloudstack import (
     AnsibleCloudStack,
-    CloudStackException,
     cs_argument_spec,
     cs_required_together,
 )
@@ -248,7 +248,7 @@ class AnsibleCloudStackLBRule(AnsibleCloudStack):
         }
 
     def get_rule(self, **kwargs):
-        rules = self.cs.listLoadBalancerRules(**kwargs)
+        rules = self.query_api('listLoadBalancerRules', **kwargs)
         if rules:
             return rules['loadbalancerrule'][0]
 
@@ -263,16 +263,12 @@ class AnsibleCloudStackLBRule(AnsibleCloudStack):
         }
 
     def present_lb_rule(self):
-        missing_params = []
-        for required_params in [
+        required_params = [
             'algorithm',
             'private_port',
             'public_port',
-        ]:
-            if not self.module.params.get(required_params):
-                missing_params.append(required_params)
-        if missing_params:
-            self.module.fail_json(msg="missing required arguments: %s" % ','.join(missing_params))
+        ]
+        self.module.fail_on_missing_params(required_params=required_params)
 
         args = self._get_common_args()
         rule = self.get_rule(**args)
@@ -296,10 +292,9 @@ class AnsibleCloudStackLBRule(AnsibleCloudStack):
                 'cidrlist': self.module.params.get('cidr'),
                 'description': self.module.params.get('description'),
                 'protocol': self.module.params.get('protocol'),
+                'networkid': self.get_network(key='id'),
             })
-            res = self.cs.createLoadBalancerRule(**args)
-            if 'errortext' in res:
-                self.module.fail_json(msg="Failed: '%s'" % res['errortext'])
+            res = self.query_api('createLoadBalancerRule', **args)
 
             poll_async = self.module.params.get('poll_async')
             if poll_async:
@@ -315,9 +310,7 @@ class AnsibleCloudStackLBRule(AnsibleCloudStack):
         if self.has_changed(args, rule):
             self.result['changed'] = True
             if not self.module.check_mode:
-                res = self.cs.updateLoadBalancerRule(**args)
-                if 'errortext' in res:
-                    self.module.fail_json(msg="Failed: '%s'" % res['errortext'])
+                res = self.query_api('updateLoadBalancerRule', **args)
 
                 poll_async = self.module.params.get('poll_async')
                 if poll_async:
@@ -330,12 +323,11 @@ class AnsibleCloudStackLBRule(AnsibleCloudStack):
         if rule:
             self.result['changed'] = True
         if rule and not self.module.check_mode:
-            res = self.cs.deleteLoadBalancerRule(id=rule['id'])
-            if 'errortext' in res:
-                self.module.fail_json(msg="Failed: '%s'" % res['errortext'])
+            res = self.query_api('deleteLoadBalancerRule', id=rule['id'])
+
             poll_async = self.module.params.get('poll_async')
             if poll_async:
-                res = self.poll_job(res, 'loadbalancer')
+                self.poll_job(res, 'loadbalancer')
         return rule
 
 
@@ -357,6 +349,8 @@ def main():
         zone=dict(),
         domain=dict(),
         account=dict(),
+        vpc=dict(),
+        network=dict(),
         poll_async=dict(type='bool', default=True),
     ))
 
@@ -366,20 +360,15 @@ def main():
         supports_check_mode=True
     )
 
-    try:
-        acs_lb_rule = AnsibleCloudStackLBRule(module)
+    acs_lb_rule = AnsibleCloudStackLBRule(module)
 
-        state = module.params.get('state')
-        if state in ['absent']:
-            rule = acs_lb_rule.absent_lb_rule()
-        else:
-            rule = acs_lb_rule.present_lb_rule()
+    state = module.params.get('state')
+    if state in ['absent']:
+        rule = acs_lb_rule.absent_lb_rule()
+    else:
+        rule = acs_lb_rule.present_lb_rule()
 
-        result = acs_lb_rule.get_result(rule)
-
-    except CloudStackException as e:
-        module.fail_json(msg='CloudStackException: %s' % str(e))
-
+    result = acs_lb_rule.get_result(rule)
     module.exit_json(**result)
 
 

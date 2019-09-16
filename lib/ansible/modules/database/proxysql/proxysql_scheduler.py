@@ -1,20 +1,10 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+# Copyright: (c) 2017, Ansible Project
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
 
 DOCUMENTATION = '''
 ---
@@ -31,6 +21,7 @@ options:
       - A schedule with I(active) set to C(False) will be tracked in the
         database, but will be never loaded in the in-memory data structures.
     default: True
+    type: bool
   interval_ms:
     description:
       - How often (in millisecond) the job will be started. The minimum value
@@ -70,36 +61,10 @@ options:
         however if you need this behaviour and you're not concerned about the
         schedules deleted, you can set I(force_delete) to C(True).
     default: False
-  save_to_disk:
-    description:
-      - Save mysql host config to sqlite db on disk to persist the
-        configuration.
-    default: True
-  load_to_runtime:
-    description:
-      - Dynamically load mysql host config to runtime memory.
-    default: True
-  login_user:
-    description:
-      - The username used to authenticate to ProxySQL admin interface.
-    default: None
-  login_password:
-    description:
-      - The password used to authenticate to ProxySQL admin interface.
-    default: None
-  login_host:
-    description:
-      - The host used to connect to ProxySQL admin interface.
-    default: '127.0.0.1'
-  login_port:
-    description:
-      - The port used to connect to ProxySQL admin interface.
-    default: 6032
-  config_file:
-    description:
-      - Specify a config file from which login_user and login_password are to
-        be read.
-    default: ''
+    type: bool
+extends_documentation_fragment:
+  - proxysql.managing_config
+  - proxysql.connectivity
 '''
 
 EXAMPLES = '''
@@ -156,23 +121,15 @@ stdout:
     }
 '''
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['stableinterface'],
                     'supported_by': 'community'}
 
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible.module_utils.mysql import mysql_connect
-from ansible.module_utils.pycompat24 import get_exception
+from ansible.module_utils.mysql import mysql_connect, mysql_driver, mysql_driver_fail_msg
 from ansible.module_utils.six import iteritems
-
-try:
-    import MySQLdb
-    import MySQLdb.cursors
-except ImportError:
-    MYSQLDB_FOUND = False
-else:
-    MYSQLDB_FOUND = True
+from ansible.module_utils._text import to_native
 
 # ===========================================
 # proxysql module specific support methods.
@@ -192,10 +149,8 @@ def perform_checks(module):
             msg="interval_ms must between 100ms & 100000000ms"
         )
 
-    if not MYSQLDB_FOUND:
-        module.fail_json(
-            msg="the python mysqldb module is required"
-        )
+    if mysql_driver is None:
+        module.fail_json(msg=mysql_driver_fail_msg)
 
 
 def save_config_to_disk(cursor):
@@ -403,11 +358,10 @@ def main():
                                login_user,
                                login_password,
                                config_file,
-                               cursor_class=MySQLdb.cursors.DictCursor)
-    except MySQLdb.Error:
-        e = get_exception()
+                               cursor_class=mysql_driver.cursors.DictCursor)
+    except mysql_driver.Error as e:
         module.fail_json(
-            msg="unable to connect to ProxySQL Admin Module.. %s" % e
+            msg="unable to connect to ProxySQL Admin Module.. %s" % to_native(e)
         )
 
     proxysql_schedule = ProxySQLSchedule(module)
@@ -418,7 +372,7 @@ def main():
 
     if proxysql_schedule.state == "present":
         try:
-            if not proxysql_schedule.check_schedule_config(cursor) > 0:
+            if proxysql_schedule.check_schedule_config(cursor) <= 0:
                 proxysql_schedule.create_schedule(module.check_mode,
                                                   result,
                                                   cursor)
@@ -428,10 +382,9 @@ def main():
                                  " need to be updated.")
                 result['schedules'] = \
                     proxysql_schedule.get_schedule_config(cursor)
-        except MySQLdb.Error:
-            e = get_exception()
+        except mysql_driver.Error as e:
             module.fail_json(
-                msg="unable to modify schedule.. %s" % e
+                msg="unable to modify schedule.. %s" % to_native(e)
             )
 
     elif proxysql_schedule.state == "absent":
@@ -452,13 +405,13 @@ def main():
                 result['changed'] = False
                 result['msg'] = ("The schedule is already absent from the" +
                                  " memory configuration")
-        except MySQLdb.Error:
-            e = get_exception()
+        except mysql_driver.Error as e:
             module.fail_json(
-                msg="unable to remove schedule.. %s" % e
+                msg="unable to remove schedule.. %s" % to_native(e)
             )
 
     module.exit_json(**result)
+
 
 if __name__ == '__main__':
     main()

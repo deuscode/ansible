@@ -1,28 +1,18 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-#
-# (c) 2017, Ted Trask <ttrask01@yahoo.com>
-#
-# This file is part of Ansible
-#
-# This module is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This software is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this software.  If not, see <http://www.gnu.org/licenses/>.
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+# Copyright: (c) 2017, Ted Trask <ttrask01@yahoo.com>
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
+
+
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['stableinterface'],
                     'supported_by': 'community'}
 
-DOCUMENTATION = '''
+DOCUMENTATION = r'''
 ---
 module: awall
 short_description: Manage awall policies
@@ -30,40 +20,44 @@ version_added: "2.4"
 author: Ted Trask (@tdtrask) <ttrask01@yahoo.com>
 description:
   - This modules allows for enable/disable/activate of I(awall) policies.
-    Alpine Wall (I(awall)) generates a firewall configuration from the enabled policy files
+  - Alpine Wall (I(awall)) generates a firewall configuration from the enabled policy files
     and activates the configuration on the system.
 options:
   name:
     description:
-      - A policy name, like C(foo), or multiple policies, like C(foo, bar).
-    default: null
+      - One or more policy names.
+    type: list
   state:
     description:
-      - The policy(ies) will be C(enabled)
-      - The policy(ies) will be C(disabled)
+      - Whether the policies should be enabled or disabled.
+    type: str
+    choices: [ disabled, enabled ]
     default: enabled
-    choices: [ "enabled", "disabled" ]
   activate:
     description:
-      - Activate the new firewall rules. Can be run with other steps or on it's own.
-    default: False
+      - Activate the new firewall rules.
+      - Can be run with other steps or on its own.
+    type: bool
+    default: no
 '''
 
-EXAMPLES = '''
+EXAMPLES = r'''
 - name: Enable "foo" and "bar" policy
   awall:
-    name: foo,bar
+    name: [ foo bar ]
     state: enabled
 
 - name: Disable "foo" and "bar" policy and activate new rules
   awall:
-    name: foo,bar
+    name:
+    - foo
+    - bar
     state: disabled
-    activate: False
+    activate: no
 
 - name: Activate currently enabled firewall rules
   awall:
-    activate: True
+    activate: yes
 '''
 
 RETURN = ''' # '''
@@ -84,7 +78,7 @@ def activate(module):
 def is_policy_enabled(module, name):
     cmd = "%s list" % (AWALL_PATH)
     rc, stdout, stderr = module.run_command(cmd)
-    if re.search("^%s\s+enabled" % name, stdout, re.MULTILINE):
+    if re.search(r"^%s\s+enabled" % name, stdout, re.MULTILINE):
         return True
     return False
 
@@ -132,12 +126,12 @@ def disable_policy(module, names, act):
 def main():
     module = AnsibleModule(
         argument_spec=dict(
-            state=dict(default='enabled', choices=['enabled', 'disabled']),
+            state=dict(type='str', default='enabled', choices=['disabled', 'enabled']),
             name=dict(type='list'),
-            activate=dict(default=False, type='bool'),
+            activate=dict(type='bool', default=False),
         ),
         required_one_of=[['name', 'activate']],
-        supports_check_mode=True
+        supports_check_mode=True,
     )
 
     global AWALL_PATH
@@ -158,6 +152,6 @@ def main():
 
     module.fail_json(msg="no action defined")
 
-# import module snippets
+
 if __name__ == '__main__':
     main()

@@ -1,25 +1,15 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-# (c) 2015, Ansible, inc
+# (c) 2015, Ansible Project
 #
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
-#
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
+
+
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['stableinterface'],
                     'supported_by': 'core'}
 
@@ -29,19 +19,22 @@ DOCUMENTATION = '''
 module: package
 version_added: 2.0
 author:
-    - Ansible Inc
+    - Ansible Core Team
 short_description: Generic OS package manager
 description:
      - Installs, upgrade and removes packages using the underlying OS package manager.
+     - For Windows targets, use the M(win_package) module instead.
 options:
   name:
     description:
-      - "Package name, or package specifier with version, like C(name-1.0)."
-      - "Be aware that packages are not always named the same and this module will not 'translate' them per distro."
+      - Package name, or package specifier with version.
+      - Syntax varies with package manager. For example C(name-1.0) or C(name=1.0).
+      - Package names also vary with package manager; this module will not "translate" them per distro. For example C(libyaml-dev), C(libyaml-devel).
     required: true
   state:
     description:
-      - Whether to install (C(present), C(latest)), or remove (C(absent)) a package.
+      - Whether to install (C(present)), or remove (C(absent)) a package.
+      - You can use other states like C(latest) ONLY if they are supported by the underlying package module(s) executed.
     required: true
   use:
     description:
@@ -53,12 +46,13 @@ requirements:
     - Whatever is required for the package plugins specific for each system.
 notes:
     - This module actually calls the pertinent package modules for each system (apt, yum, etc).
+    - For Windows targets, use the M(win_package) module instead.
 '''
 EXAMPLES = '''
-- name: install the latest version of ntpdate
+- name: install ntpdate
   package:
     name: ntpdate
-    state: latest
+    state: present
 
 # This uses a variable as this changes per distribution.
 - name: remove the apache package

@@ -1,45 +1,70 @@
+.. _developing_modules_documenting:
 .. _module_documenting:
 
-Documenting Your Module
-=======================
+*******************************
+Module format and documentation
+*******************************
 
-.. contents:: Topics
+If you want to contribute your module to Ansible, you must write your module in Python and follow the standard format described below. (Unless you're writing a Windows module, in which case the :ref:`Windows guidelines <developing_modules_general_windows>` apply.) In addition to following this format, you should review our :ref:`submission checklist <developing_modules_checklist>`, :ref:`programming tips <developing_modules_best_practices>`, and :ref:`strategy for maintaining Python 2 and Python 3 compatibility <developing_python_3>`, as well as information about :ref:`testing <developing_testing>` before you open a pull request.
 
-The online module documentation is generated from the modules themselves.
-As the module documentation is generated from documentation strings contained in the modules, all modules included with Ansible must have a ``DOCUMENTATION`` string.
-This string must be a valid YAML document
-which conforms to the schema defined below. You may find it easier to
-start writing your ``DOCUMENTATION`` string in an editor with YAML
-syntax highlighting before you include it in your Python file.
+Every Ansible module written in Python must begin with seven standard sections in a particular order, followed by the code. The sections in order are:
 
-All modules must have the following sections defined in this order:
-
-1. ANSIBLE_METADATA
-2. DOCUMENTATION
-3. EXAMPLES
-4. RETURNS
-5. Python imports
+.. contents::
+   :depth: 1
+   :local:
 
 .. note:: Why don't the imports go first?
 
-  Keen Python programmers may notice that contrary to PEP8's advice we don't put ``imports`` at the top of the file. This is because the ``ANSIBLE_METADATA`` through ``RETURNS`` sections are not used by the module code itself; they are essentially extra docstrings for the file. The imports are placed after these special variables for the same reason as PEP8 puts the imports after the introductory comments and docstrings. This keeps the active parts of the code together and the pieces which are purely informational apart. The decision to exclude E402 is based on readability (which is what PEP8 is about). Documentation strings in a module are much more similar to module level docstrings, than code, and are never utilized by the module itself. Placing the imports below this documentation and closer to the code, consolidates and groups all related code in a congruent manner to improve readability, debugging and understanding.
+  Keen Python programmers may notice that contrary to PEP 8's advice we don't put ``imports`` at the top of the file. This is because the ``ANSIBLE_METADATA`` through ``RETURN`` sections are not used by the module code itself; they are essentially extra docstrings for the file. The imports are placed after these special variables for the same reason as PEP 8 puts the imports after the introductory comments and docstrings. This keeps the active parts of the code together and the pieces which are purely informational apart. The decision to exclude E402 is based on readability (which is what PEP 8 is about). Documentation strings in a module are much more similar to module level docstrings, than code, and are never utilized by the module itself. Placing the imports below this documentation and closer to the code, consolidates and groups all related code in a congruent manner to improve readability, debugging and understanding.
 
-.. warning:: Why do some modules have imports at the bottom of the file?
+.. warning:: **Copy old modules with care!**
 
-  If you look at some existing older modules, you may find imports at the bottom of the file. Do not copy that idiom into new modules as it is a historical oddity due to how modules used to be combined with libraries. Over time we're moving the imports to be in their proper place.
+  Some older modules in Ansible Core have ``imports`` at the bottom of the file, ``Copyright`` notices with the full GPL prefix, and/or ``ANSIBLE_METADATA`` fields in the wrong order. These are legacy files that need updating - do not copy them into new modules. Over time we're updating and correcting older modules. Please follow the guidelines on this page!
 
+.. _shebang:
 
+Python shebang & UTF-8 coding
+===============================
 
-ANSIBLE_METADATA Block
-----------------------
+Every Ansible module must begin with ``#!/usr/bin/python`` - this "shebang" allows ``ansible_python_interpreter`` to work.
+This is immediately followed by ``# -*- coding: utf-8 -*-`` to clarify that the file is UTF-8 encoded.
 
-``ANSIBLE_METADATA`` contains information about the module for use by other tools. At the moment, it informs other tools which type of maintainer the module has and to what degree users can rely on a module's behaviour remaining the same over time.
+.. _copyright:
 
-For new modules, the following block can be simply added into your module
+Copyright and license
+=====================
+
+After the shebang and UTF-8 coding, there should be a `copyright line <https://www.gnu.org/licenses/gpl-howto.en.html>`_ with the original copyright holder and a license declaration. The license declaration should be ONLY one line, not the full GPL prefix.:
 
 .. code-block:: python
 
-   ANSIBLE_METADATA = {'metadata_version': '1.0',
+    #!/usr/bin/python
+    # -*- coding: utf-8 -*-
+
+    # Copyright: (c) 2018, Terry Jones <terry.jones@example.org>
+    # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+
+Major additions to the module (for instance, rewrites) may add additional copyright lines. Any legal review will include the source control history, so an exhaustive copyright header is not necessary. When adding a second copyright line for a significant feature or rewrite, add the newer line above the older one:
+
+.. code-block:: python
+
+    #!/usr/bin/python
+    # -*- coding: utf-8 -*-
+
+    # Copyright: (c) 2017, [New Contributor(s)]
+    # Copyright: (c) 2015, [Original Contributor(s)]
+    # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+
+.. _ansible_metadata_block:
+
+ANSIBLE_METADATA block
+======================
+
+After the shebang, the UTF-8 coding, the copyright, and the license, your module file should contain an ``ANSIBLE_METADATA`` section. This section provides information about the module for use by other tools. For new modules, the following block can be simply added into your module:
+
+.. code-block:: python
+
+   ANSIBLE_METADATA = {'metadata_version': '1.1',
                        'status': ['preview'],
                        'supported_by': 'community'}
 
@@ -48,307 +73,371 @@ For new modules, the following block can be simply added into your module
    * ``metadata_version`` is the version of the ``ANSIBLE_METADATA`` schema, *not* the version of the module.
    * Promoting a module's ``status`` or ``supported_by`` status should only be done by members of the Ansible Core Team.
 
-.. note:: Pre-released metdata version
+Ansible metadata fields
+-----------------------
 
-    During development of Ansible-2.3, modules had an initial version of the
-    metadata.  This version was modified slightly after release to fix some
-    points of confusion.  You may occassionally see PRs for modules where the
-    ANSIBLE_METADATA doesn't look quite right because of this.  Module
-    metadata should be fixed before checking it into the repository.
-
-Version 1.0 of the metadata
-+++++++++++++++++++++++++++
-
-Structure
-`````````
-
-.. code-block:: python
-
-  ANSIBLE_METADATA = {
-      'metadata_version': '1.0',
-      'supported_by': 'community',
-      'status': ['preview', 'deprecated']
-  }
-
-Fields
-``````
-
-:metadata_version: An “X.Y” formatted string. X and Y are integers which
+:metadata_version: An "X.Y" formatted string. X and Y are integers which
    define the metadata format version. Modules shipped with Ansible are
    tied to an Ansible release, so we will only ship with a single version
-   of the metadata. We’ll increment Y if we add fields or legal values
-   to an existing field. We’ll increment X if we remove fields or values
+   of the metadata. We'll increment Y if we add fields or legal values
+   to an existing field. We'll increment X if we remove fields or values
    or change the type or meaning of a field.
-:supported_by: This field records who supports the module.
-   Default value is ``community``. Values are:
+   Current metadata_version is "1.1"
 
-   :core:
-   :curated:
-   :community:
-   
-   For information on what the support level values entail, please see
-   `Modules Support <http://docs.ansible.com/ansible/modules_support.html>`_.
+:supported_by: Who supports the module.
+   Default value is ``community``. For information on what the support level values entail, please see
+   :ref:`Modules Support <modules_support>`. Values are:
 
-:status: This field records information about the module that is
-   important to the end user. It’s a list of strings. The default value
-   is a single element list [“preview”]. The following strings are valid
+   * core
+   * network
+   * certified
+   * community
+   * curated (*deprecated value - modules in this category should be core or
+     certified instead*)
+
+:status: List of strings describing how stable the module is likely to be. See also :ref:`module_lifecycle`.
+   The default value is a single element list ["preview"]. The following strings are valid
    statuses and have the following meanings:
 
-   :stableinterface: This means that the module’s parameters are
-      stable. Every effort will be made not to remove parameters or change
-      their meaning. It is not a rating of the module’s code quality.
-   :preview: This module is a tech preview. This means it may be
-      unstable, the parameters may change, or it may require libraries or
+   :stableinterface: The module's options (the parameters or arguments it accepts) are stable. Every effort will be made not to remove options or change
+      their meaning. **Not** a rating of the module's code quality.
+   :preview: The module is in tech preview. It may be
+      unstable, the options may change, or it may require libraries or
       web services that are themselves subject to incompatible changes.
-   :deprecated: This module is deprecated and will no longer be
-      available in a future release.
-   :removed: This module is not present in the release. A stub is
+   :deprecated: The module is deprecated and will be removed in a future release.
+   :removed: The module is not present in the release. A stub is
       kept so that documentation can be built. The documentation helps
       users port from the removed module to new modules.
 
-DOCUMENTATION Block
--------------------
+.. _documentation_block:
 
-See an example documentation string in the checkout under `examples/DOCUMENTATION.yml <https://github.com/ansible/ansible/blob/devel/examples/DOCUMENTATION.yml>`_.
+DOCUMENTATION block
+===================
 
-Include it in your module file like this:
+After the shebang, the UTF-8 coding, the copyright line, the license, and the ``ANSIBLE_METADATA`` section comes the ``DOCUMENTATION`` block. Ansible's online module documentation is generated from the ``DOCUMENTATION`` blocks in each module's source code. The ``DOCUMENTATION`` block must be valid YAML. You may find it easier to start writing your ``DOCUMENTATION`` string in an :ref:`editor with YAML syntax highlighting <other_tools_and_programs>` before you include it in your Python file. You can start by copying our `example documentation string <https://github.com/ansible/ansible/blob/devel/examples/DOCUMENTATION.yml>`_ into your module file and modifying it. If you run into syntax issues in your YAML, you can validate it on the `YAML Lint <http://www.yamllint.com/>`_ website.
 
-.. code-block:: python
+Module documentation should briefly and accurately define what each module and option does, and how it works with others in the underlying system. Documentation should be written for broad audience--readable both by experts and non-experts.
+    * Descriptions should always start with a capital letter and end with a full stop. Consistency always helps.
+    * Verify that arguments in doc and module spec dict are identical.
+    * For password / secret arguments no_log=True should be set.
+    * If an option is only sometimes required, describe the conditions. For example, "Required when I(state=present)."
+    * If your module allows ``check_mode``, reflect this fact in the documentation.
 
-    #!/usr/bin/python
-    # Copyright header....
+Each documentation field is described below. Before committing your module documentation, please test it at the command line and as HTML:
 
-    DOCUMENTATION = '''
-    ---
-    module: modulename
-    short_description: This is a sentence describing the module
-    # ... snip ...
-    '''
+* As long as your module file is :ref:`available locally <local_modules>`, you can use ``ansible-doc -t module my_module_name`` to view your module documentation at the command line. Any parsing errors will be obvious - you can view details by adding ``-vvv`` to the command.
+* You should also :ref:`test the HTML output <testing_module_documentation>` of your module documentation.
 
+Documentation fields
+--------------------
 
-The following fields can be used and are all required unless specified otherwise:
+All fields in the ``DOCUMENTATION`` block are lower-case. All fields are required unless specified otherwise:
 
 :module:
-  The name of the module. This must be the same as the filename, without the ``.py`` extension.
+
+  * The name of the module.
+  * Must be the same as the filename, without the ``.py`` extension.
+
 :short_description:
-  * A short description which is displayed on the :doc:`../list_of_all_modules` page and ``ansible-doc -l``.
-  * As the short description is displayed by ``ansible-doc -l`` without the category grouping it needs enough detail to explain its purpose without the context of the directory structure in which it lives.
-  * Unlike ``description:`` this field should not have a trailing full stop.
+
+  * A short description which is displayed on the :ref:`all_modules` page and ``ansible-doc -l``.
+  * The ``short_description`` is displayed by ``ansible-doc -l`` without any category grouping,
+    so it needs enough detail to explain the module's purpose without the context of the directory structure in which it lives.
+  * Unlike ``description:``, ``short_description`` should not have a trailing period/full stop.
+
 :description:
+
   * A detailed description (generally two or more sentences).
-  * Must be written in full sentences, i.e. with capital letters and fullstops.
-  * Shouldn't mention the name module.
+  * Must be written in full sentences, i.e. with capital letters and periods/full stops.
+  * Shouldn't mention the module name.
+  * Make use of multiple entries rather than using one long paragraph.
+  * Don't quote complete values unless it is required by YAML.
+
 :version_added:
-  The version of Ansible when the module was added.
-  This is a `string`, and not a float, i.e. ``version_added: "2.1"``
+
+  * The version of Ansible when the module was added.
+  * This is a string, and not a float, i.e. ``version_added: '2.1'``
+
 :author:
-  Name of the module author in the form ``First Last (@GitHubID)``. Use a multi-line list if there is more than one author.
+
+  * Name of the module author in the form ``First Last (@GitHubID)``.
+  * Use a multi-line list if there is more than one author.
+  * Don't use quotes as it should not be required by YAML.
+
 :deprecated:
-  If this module is deprecated, detail when that happened, and what to use instead, e.g.
-  `Deprecated in 2.3. Use M(whatmoduletouseinstead) instead.`
-  Ensure `CHANGELOG.md` is updated to reflect this.
+
+  * Marks modules that will be removed in future releases. See also :ref:`module_lifecycle`.
+
 :options:
-  One per module argument:
+
+  * Options are often called `parameters` or `arguments`. Because the documentation field is called `options`, we will use that term.
+  * If the module has no options (for example, it's a ``_facts`` module), all you need is one line: ``options: {}``.
+  * If your module has options (in other words, accepts arguments), each option should be documented thoroughly. For each module option, include:
 
   :option-name:
 
-    * Declarative operation (not CRUD)–this makes it easy for a user not to care what the existing state is, just about the final state, for example `online:`, rather than `is_online:`.
+    * Declarative operation (not CRUD), to focus on the final state, for example `online:`, rather than `is_online:`.
     * The name of the option should be consistent with the rest of the module, as well as other modules in the same category.
+    * When in doubt, look for other modules to find option names that are used for the same purpose, we like to offer consistency to our users.
 
   :description:
 
     * Detailed explanation of what this option does. It should be written in full sentences.
-    * Should not list the options values (that's what ``choices:`` is for, though it should explain `what` the values do if they aren't obvious.
-    * If an optional parameter is sometimes required this need to be reflected in the documentation, e.g. "Required when I(state=present)."
+    * The first entry is a description of the option itself; subsequent entries detail its use, dependencies, or format of possible values.
+    * Should not list the possible values (that's what ``choices:`` is for, though it should explain what the values do if they aren't obvious).
+    * If an option is only sometimes required, describe the conditions. For example, "Required when I(state=present)."
     * Mutually exclusive options must be documented as the final sentence on each of the options.
+
   :required:
-    Only needed if true, otherwise it is assumed to be false.
+
+    * Only needed if ``true``.
+    * If missing, we assume the option is not required.
+
   :default:
 
-    * If `required` is false/missing, `default` may be specified (assumed 'null' if missing).
-    * Ensure that the default parameter in the docs matches the default parameter in the code.
-    * The default option must not be listed as part of the description.
-  :choices:
-    List of option values. Should be absent if empty.
-  :type:
-    If an argument is ``type='bool'``, this field should be set to ``type: bool`` and no ``choices`` should be specified.
-  :aliases:
-    List of option name aliases; generally not needed.
-  :version_added:
-    Only needed if this option was extended after initial Ansible release, i.e. this is greater than the top level `version_added` field.
-    This is a string, and not a float, i.e. ``version_added: "2.3"``.
-  :suboptions:
-    If this option takes a dict, you can define it here. See `azure_rm_securitygroup`, `os_ironic_node` for examples.
-:requirements:
-  List of requirements, and minimum versions (if applicable)
-:notes:
-    Details of any important information that doesn't fit in one of the above sections; for example if ``check_mode`` isn't supported, or a link to external documentation.
+    * If ``required`` is false/missing, ``default`` may be specified (assumed 'null' if missing).
+    * Ensure that the default value in the docs matches the default value in the code.
+    * The default field must not be listed as part of the description, unless it requires additional information or conditions.
+    * If the option is a boolean value, you can use any of the boolean values recognized by Ansible:
+      (such as true/false or yes/no).  Choose the one that reads better in the context of the option.
 
+  :choices:
+
+    * List of option values.
+    * Should be absent if empty.
+
+  :type:
+
+    * Specifies the data type that option accepts, must match the ``argspec``.
+    * If an argument is ``type='bool'``, this field should be set to ``type: bool`` and no ``choices`` should be specified.
+
+  :aliases:
+    * List of optional name aliases.
+    * Generally not needed.
+
+  :version_added:
+
+    * Only needed if this option was extended after initial Ansible release, i.e. this is greater than the top level `version_added` field.
+    * This is a string, and not a float, i.e. ``version_added: '2.3'``.
+
+  :suboptions:
+
+    * If this option takes a dict or list of dicts, you can define the structure here.
+    * See :ref:`azure_rm_securitygroup_module`, :ref:`azure_rm_azurefirewall_module` and :ref:`os_ironic_node_module` for examples.
+
+:requirements:
+
+  * List of requirements (if applicable).
+  * Include minimum versions.
+
+:seealso:
+
+  * A list of references to other modules, documentation or Internet resources
+  * A reference can be one of the following formats:
+
+
+    .. code-block:: yaml+jinja
+
+        seealso:
+
+        # Reference by module name
+        - module: aci_tenant
+
+        # Reference by module name, including description
+        - module: aci_tenant
+          description: ACI module to create tenants on a Cisco ACI fabric.
+
+        # Reference by rST documentation anchor
+        - ref: aci_guide
+          description: Detailed information on how to manage your ACI infrastructure using Ansible.
+
+        # Reference by Internet resource
+        - name: APIC Management Information Model reference
+          description: Complete reference of the APIC object model.
+          link: https://developer.cisco.com/docs/apic-mim-ref/
+
+:notes:
+
+  * Details of any important information that doesn't fit in one of the above sections.
+  * For example, whether ``check_mode`` is or is not supported.
+
+
+Linking within module documentation
+-----------------------------------
+
+You can link from your module documentation to other module docs, other resources on docs.ansible.com, and resources elsewhere on the internet. The correct formats for these links are:
+
+* ``L()`` for Links with a heading. For example: ``See L(IOS Platform Options guide,../network/user_guide/platform_ios.html).``
+* ``U()`` for URLs. For example: ``See U(https://www.ansible.com/products/tower) for an overview.``
+* ``I()`` for option names. For example: ``Required if I(state=present).``
+* ``C()`` for files and option values. For example: ``If not set the environment variable C(ACME_PASSWORD) will be used.``
+* ``M()`` for module names. For example: ``See also M(win_copy) or M(win_template).``
 
 .. note::
 
-   - The above fields are are all in lowercase.
+    - To refer a collection of modules, use ``C(..)``, e.g. ``Refer to the C(win_*) modules.``
+    - Because it stands out better, using ``seealso`` is preferred for general references over the use of notes or adding links to the description.
 
-   - If the module doesn't doesn't have any options (for example, it's a ``_facts`` module), you can use ``options: {}``.
+.. _module_docs_fragments:
+
+Documentation fragments
+-----------------------
+
+If you're writing multiple related modules, they may share common documentation, such as authentication details, file mode settings, ``notes:`` or ``seealso:`` entries. Rather than duplicate that information in each module's ``DOCUMENTATION`` block, you can save it once as a doc_fragment plugin and use it in each module's documentation. In Ansible, shared documentation fragments are contained in a ``ModuleDocFragment`` class in `lib/ansible/plugins/doc_fragments/ <https://github.com/ansible/ansible/tree/devel/lib/ansible/plugins/doc_fragments>`_. To include a documentation fragment, add ``extends_documentation_fragment: FRAGMENT_NAME`` in your module's documentation.
+
+Modules should only use items from a doc fragment if the module will implement all of the interface documented there in a manner that behaves the same as the existing modules which import that fragment. The goal is that items imported from the doc fragment will behave identically when used in another module that imports the doc fragment.
+
+By default, only the ``DOCUMENTATION`` property from a doc fragment is inserted into the module documentation. It is possible to define additional properties in the doc fragment in order to import only certain parts of a doc fragment or mix and match as appropriate. If a property is defined in both the doc fragment and the module, the module value overrides the doc fragment.
+
+Here is an example doc fragment named ``example_fragment.py``:
+
+.. code-block:: python
+
+    class ModuleDocFragment(object):
+        # Standard documentation
+        DOCUMENTATION = r'''
+        options:
+          # options here
+        '''
+
+        # Additional section
+        OTHER = r'''
+        options:
+          # other options here
+        '''
+
+
+To insert the contents of ``OTHER`` in a module:
+
+.. code-block:: yaml+jinja
+
+    extends_documentation_fragment: example_fragment.other
+
+Or use both :
+
+.. code-block:: yaml+jinja
+
+    extends_documentation_fragment:
+      - example_fragment
+      - example_fragment.other
+
+.. _note:
+  * Prior to Ansible 2.8, documentation fragments were kept in ``lib/ansible/utils/module_docs_fragments``.
+
+.. versionadded:: 2.8
+
+Since Ansible 2.8, you can have user-supplied doc_fragments by using a ``doc_fragments`` directory adjacent to play or role, just like any other plugin.
+
+For example, all AWS modules should include:
+
+.. code-block:: yaml+jinja
+
+    extends_documentation_fragment:
+    - aws
+    - ec2
+
+
+.. _examples_block:
 
 EXAMPLES block
---------------
+==============
 
-The EXAMPLES section is required for all new modules.
+After the shebang, the UTF-8 coding, the copyright line, the license, the ``ANSIBLE_METADATA`` section, and the ``DOCUMENTATION`` block comes the ``EXAMPLES`` block. Here you show users how your module works with real-world examples in multi-line plain-text YAML format. The best examples are ready for the user to copy and paste into a playbook. Review and update your examples with every change to your module.
 
-Examples should demonstrate real world usage, and be written in multi-line plain-text YAML format.
+Per playbook best practices, each example should include a ``name:`` line::
 
-Ensure that examples are kept in sync with the options during the PR review and any following code refactor.
-
-As per playbook best practice, a `name:` should be specified.
-
-``EXAMPLES`` string within the module like this::
-
-    EXAMPLES = '''
+    EXAMPLES = r'''
     - name: Ensure foo is installed
       modulename:
         name: foo
         state: present
     '''
 
-If the module returns facts that are often needed, an example of how to use them can be helpful.
+The ``name:`` line should be capitalized and not include a trailing dot.
 
-RETURN Block
-------------
+If your examples use boolean options, use yes/no values. Since the documentation generates boolean values as yes/no, having the examples use these values as well makes the module documentation more consistent.
 
-The RETURN section documents what the module returns, and is required for all new modules.
+If your module returns facts that are often needed, an example of how to use them can be helpful.
 
-For each value returned, provide a ``description``, in what circumstances the value is ``returned``,
-the ``type`` of the value and a ``sample``.  For example, from the ``copy`` module:
+.. _return_block:
 
+RETURN block
+============
 
-The following fields can be used and are all required unless specified otherwise.
+After the shebang, the UTF-8 coding, the copyright line, the license, the ``ANSIBLE_METADATA`` section, ``DOCUMENTATION`` and ``EXAMPLES`` blocks comes the ``RETURN`` block. This section documents the information the module returns for use by other modules.
+
+If your module doesn't return anything (apart from the standard returns), this section of your module should read: ``RETURN = r''' # '''``
+Otherwise, for each value returned, provide the following fields. All fields are required unless specified otherwise.
 
 :return name:
   Name of the returned field.
 
   :description:
-    Detailed description of what this value represents.
+    Detailed description of what this value represents. Capitalized and with trailing dot.
   :returned:
-    When this value is returned, such as `always`, on `success`, `always`
+    When this value is returned, such as ``always``, or ``on success``.
   :type:
-    Data type
+    Data type.
   :sample:
     One or more examples.
+  :version_added:
+    Only needed if this return was extended after initial Ansible release, i.e. this is greater than the top level `version_added` field.
+    This is a string, and not a float, i.e. ``version_added: '2.3'``.
   :contains:
-    Optional, if you set `type: complex` you can detail the dictionary here by repeating the above elements.
+    Optional. To describe nested return values, set ``type: complex`` and repeat the elements above for each sub-field.
 
-    :return name:
-      One per return
+Here are two example ``RETURN`` sections, one with three simple fields and one with a complex nested field::
 
-      :description:
-        Detailed description of what this value represents.
-      :returned:
-        When this value is returned, such as `always`, on `success`, `always`
-      :type:
-        Data type
-      :sample:
-        One or more examples.
-
-
-For complex nested returns type can be specified as ``type: complex``.
-
-Example::
-
-
-    RETURN = '''
+    RETURN = r'''
     dest:
-        description: destination file/path
+        description: Destination file/path.
         returned: success
-        type: string
+        type: str
         sample: /path/to/file.txt
     src:
-        description: source file used for the copy on the target machine
+        description: Source file used for the copy on the target machine.
         returned: changed
-        type: string
+        type: str
         sample: /home/httpd/.ansible/tmp/ansible-tmp-1423796390.97-147729857856000/source
     md5sum:
-        description: md5 checksum of the file after running copy
+        description: MD5 checksum of the file after running copy.
         returned: when supported
-        type: string
+        type: str
         sample: 2a5aeecc61dc98c4d780b14b330e3282
-    ...
+    '''
 
+    RETURN = r'''
+    packages:
+        description: Information about package requirements
+        returned: On success
+        type: complex
+        contains:
+            missing:
+                description: Packages that are missing from the system
+                returned: success
+                type: list
+                sample:
+                    - libmysqlclient-dev
+                    - libxml2-dev
+            badversion:
+                description: Packages that are installed but at bad versions.
+                returned: success
+                type: list
+                sample:
+                    - package: libxml2-dev
+                      version: 2.9.4+dfsg1-2
+                      constraint: ">= 3.0"
+    '''
 
-.. note::
+.. _python_imports:
 
-   If your module doesn't return anything (apart from the standard returns), you can use ``RETURN = ''' # '''``.
+Python imports
+==============
 
-
-Python Imports
---------------
-
-Starting with Ansible version 2.2, all new modules are required to use imports in the form:
+After the shebang, the UTF-8 coding, the copyright line, the license, and the sections for ``ANSIBLE_METADATA``, ``DOCUMENTATION``, ``EXAMPLES``, and ``RETURN``, you can finally add the python imports. All modules must use Python imports in the form:
 
 .. code-block:: python
 
    from module_utils.basic import AnsibleModule
 
-
-.. warning::
-
-   The use of "wildcard" imports such as ``from module_utils.basic import *`` is no longer allowed.
-
-Formatting options
-------------------
-
-These formatting functions are ``U()`` for URLs, ``I()`` for option names, ``C()`` for files and option values and ``M()`` for module names.
-Module names should be specified as ``M(module)`` to create a link to the online documentation for that module.
-
-
-Example usage::
-
-    Or if not set the environment variable C(ACME_PASSWORD) will be used.
-    ...
-    Required if I(state=present)
-    ...
-    Mutually exclusive with I(project_src) and I(files).
-    ...
-    See also M(win_copy) or M(win_template).
-    ...
-    See U(https://www.ansible.com/tower) for an overview.
-
-
-.. note::
-
-  If you wish to refer a collection of modules, use ``C(..)``, e.g. ``Refer to the C(win_*) modules.``
-
-Documentation fragments
------------------------
-
-Some categories of modules share common documentation, such as details on how to authenticate options, or file mode settings. Rather than duplicate that information it can be shared using ``docs_fragments``.
-
-These shared fragments are similar to the standard documentation block used in a module, they are just contained in a ``ModuleDocFragment`` class.
-
-All the existing ``docs_fragments`` can be found in ``lib/ansible/utils/module_docs_fragments/``.
-
-To include, simply add in ``extends_documentation_fragment: FRAGMENT_NAME`` into your module.
-
-Examples can be found by searching for ``extends_documentation_fragment`` under the Ansible source tree.
-
-Testing documentation
----------------------
-
-Put your completed module file into the ``lib/ansible/modules/$CATEGORY/`` directory and then
-run the command: ``make webdocs``. The new 'modules.html' file will be
-built in the ``docs/docsite/_build/html/$MODULENAME_module.html`` directory.
-
-To test your documentation against your ``argument_spec`` you can use ``validate-modules``. Note that this option isn't currently enabled in Shippable due to the time it takes to run.
-
-.. code-block:: bash
-
-   # If you don't already, ensure you are using your local checkout
-   source hacking/env-setup
-   ./test/sanity/validate-modules/validate-modules --arg-spec --warnings  lib/ansible/modules/your/modules/
-
-.. tip::
-
-   If you're having a problem with the syntax of your YAML you can
-   validate it on the `YAML Lint <http://www.yamllint.com/>`_ website.
-
-For more information in testing, including how to add unit and integration tests, see :doc:`testing`.
+The use of "wildcard" imports such as ``from module_utils.basic import *`` is no longer allowed.

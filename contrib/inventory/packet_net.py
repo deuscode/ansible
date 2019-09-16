@@ -43,9 +43,9 @@ import os
 import argparse
 import re
 from time import time
-import six
 
-from six.moves import configparser
+from ansible.module_utils import six
+from ansible.module_utils.six.moves import configparser
 
 try:
     import packet
@@ -55,10 +55,7 @@ except ImportError as e:
 import traceback
 
 
-try:
-    import json
-except ImportError:
-    import simplejson as json
+import json
 
 
 ini_section = 'packet'
@@ -175,6 +172,7 @@ class PacketInventory(object):
         # Configure which groups should be created.
         group_by_options = [
             'group_by_device_id',
+            'group_by_hostname',
             'group_by_facility',
             'group_by_project',
             'group_by_operating_system',
@@ -300,10 +298,15 @@ class PacketInventory(object):
         if device.state not in self.packet_device_states:
             return
 
-        # Select the best destination address
+        # Select the best destination address. Only include management
+        # addresses as non-management (elastic) addresses need manual
+        # host configuration to be routable.
+        # See https://help.packet.net/article/54-elastic-ips.
         dest = None
         for ip_address in device.ip_addresses:
-            if ip_address['public'] is True and ip_address['address_family'] == 4:
+            if ip_address['public'] is True and \
+               ip_address['address_family'] == 4 and \
+               ip_address['management'] is True:
                 dest = ip_address['address']
 
         if not dest:
@@ -326,6 +329,12 @@ class PacketInventory(object):
             self.inventory[device.id] = [dest]
             if self.nested_groups:
                 self.push_group(self.inventory, 'devices', device.id)
+
+        # Inventory: Group by device name (hopefully a group of 1)
+        if self.group_by_hostname:
+            self.push(self.inventory, device.hostname, dest)
+            if self.nested_groups:
+                self.push_group(self.inventory, 'hostnames', project.name)
 
         # Inventory: Group by project
         if self.group_by_project:
@@ -473,9 +482,9 @@ class PacketInventory(object):
 
     def to_safe(self, word):
         ''' Converts 'bad' characters in a string to underscores so they can be used as Ansible groups '''
-        regex = "[^A-Za-z0-9\_"
+        regex = r"[^A-Za-z0-9\_"
         if not self.replace_dash_in_groups:
-            regex += "\-"
+            regex += r"\-"
         return re.sub(regex + "]", "_", word)
 
     def json_format_dict(self, data, pretty=False):

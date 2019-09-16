@@ -2,21 +2,13 @@
 # coding: utf-8 -*-
 
 # (c) 2017, Wayne Witzel III <wayne@riotousliving.com>
-#
-# This module is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This software is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this software.  If not, see <http://www.gnu.org/licenses/>.
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
+
+
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
 
@@ -34,93 +26,39 @@ options:
     user:
       description:
         - User that receives the permissions specified by the role.
-      required: False
-      default: null
     team:
       description:
         - Team that receives the permissions specified by the role.
-      required: False
-      default: null
     role:
       description:
         - The role type to grant/revoke.
       required: True
-      choices: ["admin", "read", "member", "execute", "adhoc", "update", "use", "auditor"]
+      choices: ["admin", "read", "member", "execute", "adhoc", "update", "use", "auditor", "project_admin", "inventory_admin", "credential_admin",
+                "workflow_admin", "notification_admin", "job_template_admin"]
     target_team:
       description:
         - Team that the role acts on.
-      required: False
-      default: null
     inventory:
       description:
         - Inventory the role acts on.
-      required: False
-      default: null
     job_template:
       description:
-        - The job_template the role acts on.
-      required: False
-      default: null
+        - The job template the role acts on.
     credential:
       description:
         - Credential the role acts on.
-      required: False
-      default: null
     organization:
       description:
-        - Organiation the role acts on.
-      required: False
-      default: null
+        - Organization the role acts on.
     project:
       description:
         - Project the role acts on.
-      required: False
-      default: null
     state:
       description:
         - Desired state of the resource.
-      required: False
       default: "present"
       choices: ["present", "absent"]
-    tower_host:
-      description:
-        - URL to your Tower instance.
-      required: False
-      default: null
-    tower_username:
-        description:
-          - Username for your Tower instance.
-        required: False
-        default: null
-    tower_password:
-        description:
-          - Password for your Tower instance.
-        required: False
-        default: null
-    tower_verify_ssl:
-        description:
-          - Dis/allow insecure connections to Tower. If C(no), SSL certificates will not be validated.
-            This should only be used on personally controlled sites using self-signed certificates.
-        required: False
-        default: True
-    tower_config_file:
-      description:
-        - Path to the Tower config file. See notes.
-      required: False
-      default: null
-
-
-requirements:
-  - "python >= 2.6"
-  - "ansible-tower-cli >= 3.0.3"
-
-notes:
-  - If no I(config_file) is provided we will attempt to use the tower-cli library
-    defaults to find your Tower host information.
-  - I(config_file) should contain Tower configuration in the following format
-      host=hostname
-      username=username
-      password=password
+extends_documentation_fragment: tower
 '''
 
 
@@ -134,16 +72,15 @@ EXAMPLES = '''
     tower_config_file: "~/tower_cli.cfg"
 '''
 
+from ansible.module_utils.ansible_tower import TowerModule, tower_auth_config, tower_check_mode
+
 try:
     import tower_cli
-    import tower_cli.utils.exceptions as exc
+    import tower_cli.exceptions as exc
 
     from tower_cli.conf import settings
-    from ansible.module_utils.ansible_tower import tower_auth_config, tower_check_mode
-
-    HAS_TOWER_CLI = True
 except ImportError:
-    HAS_TOWER_CLI = False
+    pass
 
 
 def update_resources(module, p):
@@ -173,32 +110,25 @@ def update_resources(module, p):
 
 
 def main():
-    module = AnsibleModule(
-        argument_spec=dict(
-            user=dict(),
-            team=dict(),
-            role=dict(choices=["admin", "read", "member", "execute", "adhoc", "update", "use", "auditor"]),
-            target_team=dict(),
-            inventory=dict(),
-            job_template=dict(),
-            credential=dict(),
-            organization=dict(),
-            project=dict(),
-            tower_host=dict(),
-            tower_username=dict(),
-            tower_password=dict(no_log=True),
-            tower_verify_ssl=dict(type='bool', default=True),
-            tower_config_file=dict(type='path'),
-            state=dict(choices=['present', 'absent'], default='present'),
-        ),
-        supports_check_mode=True
+
+    argument_spec = dict(
+        user=dict(),
+        team=dict(),
+        role=dict(choices=["admin", "read", "member", "execute", "adhoc", "update", "use", "auditor", "project_admin", "inventory_admin", "credential_admin",
+                           "workflow_admin", "notification_admin", "job_template_admin"]),
+        target_team=dict(),
+        inventory=dict(),
+        job_template=dict(),
+        credential=dict(),
+        organization=dict(),
+        project=dict(),
+        state=dict(choices=['present', 'absent'], default='present'),
     )
 
-    if not HAS_TOWER_CLI:
-        module.fail_json(msg='ansible-tower-cli required for this module')
+    module = TowerModule(argument_spec=argument_spec, supports_check_mode=True)
 
     role_type = module.params.pop('role')
-    state = module.params.get('state')
+    state = module.params.pop('state')
 
     json_output = {'role': role_type, 'state': state}
 
@@ -216,13 +146,12 @@ def main():
                 json_output['id'] = result['id']
             elif state == 'absent':
                 result = role.revoke(**params)
-        except (exc.ConnectionError, exc.BadRequest, exc.NotFound) as excinfo:
+        except (exc.ConnectionError, exc.BadRequest, exc.NotFound, exc.AuthError) as excinfo:
             module.fail_json(msg='Failed to update role: {0}'.format(excinfo), changed=False)
 
     json_output['changed'] = result['changed']
     module.exit_json(**json_output)
 
 
-from ansible.module_utils.basic import AnsibleModule
 if __name__ == '__main__':
     main()

@@ -21,7 +21,7 @@ __metaclass__ = type
 
 import json
 
-from ansible.compat.tests.mock import patch
+from units.compat.mock import patch
 from ansible.modules.network.nxos import nxos_feature
 from .nxos_module import TestNxosModule, load_fixture, set_module_args
 
@@ -31,17 +31,24 @@ class TestNxosFeatureModule(TestNxosModule):
     module = nxos_feature
 
     def setUp(self):
+        super(TestNxosFeatureModule, self).setUp()
         self.mock_run_commands = patch('ansible.modules.network.nxos.nxos_feature.run_commands')
         self.run_commands = self.mock_run_commands.start()
 
         self.mock_load_config = patch('ansible.modules.network.nxos.nxos_feature.load_config')
         self.load_config = self.mock_load_config.start()
 
+        self.mock_get_capabilities = patch('ansible.modules.network.nxos.nxos_feature.get_capabilities')
+        self.get_capabilities = self.mock_get_capabilities.start()
+        self.get_capabilities.return_value = {'network_api': 'cliconf'}
+
     def tearDown(self):
+        super(TestNxosFeatureModule, self).tearDown()
         self.mock_run_commands.stop()
         self.mock_load_config.stop()
+        self.mock_get_capabilities.stop()
 
-    def load_fixtures(self, commands=None):
+    def load_fixtures(self, commands=None, device=''):
         def load_from_file(*args, **kwargs):
             module, commands = args
             output = list()
@@ -52,9 +59,8 @@ class TestNxosFeatureModule(TestNxosModule):
                     command = obj['command']
                 except ValueError:
                     command = item['command']
-            filename = str(command).replace(' ', '_')
-            filename = 'nxos_feature/%s.txt' % filename
-            output.append(load_fixture(filename))
+            filename = '%s.txt' % str(command).replace(' ', '_')
+            output.append(load_fixture('nxos_feature', filename))
             return output
 
         self.run_commands.side_effect = load_from_file
@@ -63,9 +69,9 @@ class TestNxosFeatureModule(TestNxosModule):
     def test_nxos_feature_enable(self):
         set_module_args(dict(feature='nve', state='enabled'))
         result = self.execute_module(changed=True)
-        self.assertEqual(result['commands'], ['feature nv overlay'])
+        self.assertEqual(result['commands'], ['terminal dont-ask', 'feature nv overlay'])
 
     def test_nxos_feature_disable(self):
         set_module_args(dict(feature='ospf', state='disabled'))
         result = self.execute_module(changed=True)
-        self.assertEqual(result['commands'], ['no feature ospf'])
+        self.assertEqual(result['commands'], ['terminal dont-ask', 'no feature ospf'])

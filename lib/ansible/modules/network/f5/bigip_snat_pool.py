@@ -1,418 +1,530 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 #
-# Copyright 2016 F5 Networks Inc.
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+# Copyright: (c) 2016, F5 Networks Inc.
+# GNU General Public License v3.0 (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
-                    'status': ['preview'],
-                    'supported_by': 'community'}
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
 
 
-DOCUMENTATION = '''
+ANSIBLE_METADATA = {'metadata_version': '1.1',
+                    'status': ['stableinterface'],
+                    'supported_by': 'certified'}
+
+DOCUMENTATION = r'''
 ---
 module: bigip_snat_pool
-short_description: Manage SNAT pools on a BIG-IP.
+short_description: Manage SNAT pools on a BIG-IP
 description:
   - Manage SNAT pools on a BIG-IP.
-version_added: "2.3"
+version_added: 2.3
 options:
-  append:
-    description:
-      - When C(yes), will only add members to the SNAT pool. When C(no), will
-        replace the existing member list with the provided member list.
-    choices:
-      - yes
-      - no
-    default: no
   members:
     description:
       - List of members to put in the SNAT pool. When a C(state) of present is
         provided, this parameter is required. Otherwise, it is optional.
-    required: false
-    default: None
-    aliases: ['member']
+      - The members can be either IP addresses, or names of the SNAT translation objects.
+    type: list
+    aliases:
+      - member
+  description:
+    description:
+      - A general description of the SNAT pool, provided by the user for their
+        benefit. It is optional.
+    type: str
+    version_added: 2.9
   name:
-    description: The name of the SNAT pool.
+    description:
+      - The name of the SNAT pool.
+    type: str
     required: True
   state:
     description:
       - Whether the SNAT pool should exist or not.
-    required: false
-    default: present
+    type: str
     choices:
       - present
       - absent
+    default: present
+  partition:
+    description:
+      - Device partition to manage resources on.
+    type: str
+    default: Common
+    version_added: 2.5
 notes:
-   - Requires the f5-sdk Python package on the host. This is as easy as
-     pip install f5-sdk
-   - Requires the netaddr Python package on the host. This is as easy as
-     pip install netaddr
+  - When C(bigip_snat_pool) object is removed it also removes any associated C(bigip_snat_translation) objects.
+  - This is a BIG-IP behavior not module behavior and it only occurs when the C(bigip_snat_translation) objects
+    are also not referenced by another C(bigip_snat_pool).
 extends_documentation_fragment: f5
-requirements:
-  - f5-sdk
 author:
   - Tim Rupp (@caphrim007)
+  - Wojciech Wypior (@wojtek0806)
 '''
 
-EXAMPLES = '''
+EXAMPLES = r'''
 - name: Add the SNAT pool 'my-snat-pool'
   bigip_snat_pool:
-      server: "lb.mydomain.com"
-      user: "admin"
-      password: "secret"
-      name: "my-snat-pool"
-      state: "present"
-      members:
-          - 10.10.10.10
-          - 20.20.20.20
+    name: my-snat-pool
+    state: present
+    members:
+      - 10.10.10.10
+      - 20.20.20.20
+    provider:
+      server: lb.mydomain.com
+      user: admin
+      password: secret
   delegate_to: localhost
 
 - name: Change the SNAT pool's members to a single member
   bigip_snat_pool:
-      server: "lb.mydomain.com"
-      user: "admin"
-      password: "secret"
-      name: "my-snat-pool"
-      state: "present"
-      member: "30.30.30.30"
-  delegate_to: localhost
-
-- name: Append a new list of members to the existing pool
-  bigip_snat_pool:
-      server: "lb.mydomain.com"
-      user: "admin"
-      password: "secret"
-      name: "my-snat-pool"
-      state: "present"
-      members:
-          - 10.10.10.10
-          - 20.20.20.20
+    name: my-snat-pool
+    state: present
+    member: 30.30.30.30
+    provider:
+      server: lb.mydomain.com
+      user: admin
+      password: secret
   delegate_to: localhost
 
 - name: Remove the SNAT pool 'my-snat-pool'
   bigip_snat_pool:
-      server: "lb.mydomain.com"
-      user: "admin"
-      password: "secret"
-      name: "johnd"
-      state: "absent"
+    name: johnd
+    state: absent
+    provider:
+      server: lb.mydomain.com
+      user: admin
+      password: secret
+  delegate_to: localhost
+
+- name: Add the SNAT pool 'my-snat-pool' with a description
+  bigip_snat_pool:
+    name: my-snat-pool
+    state: present
+    members:
+      - 10.10.10.10
+      - 20.20.20.20
+    description: A SNAT pool description
+    provider:
+      server: lb.mydomain.com
+      user: admin
+      password: secret
   delegate_to: localhost
 '''
 
-RETURN = '''
+RETURN = r'''
 members:
-    description:
-      - List of members that are part of the SNAT pool.
-    returned: changed and success
-    type: list
-    sample: "['10.10.10.10']"
+  description:
+    - List of members that are part of the SNAT pool.
+  returned: changed and success
+  type: list
+  sample: "['10.10.10.10']"
 '''
 
-try:
-    from f5.bigip.contexts import TransactionContextManager
-    from f5.bigip import ManagementRoot
-    from icontrol.session import iControlUnexpectedHTTPError
+import re
+import os
 
-    HAS_F5SDK = True
-except ImportError:
-    HAS_F5SDK = False
+from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils.basic import env_fallback
 
 try:
-    from netaddr import IPAddress, AddrFormatError
-    HAS_NETADDR = True
+    from library.module_utils.network.f5.bigip import F5RestClient
+    from library.module_utils.network.f5.common import F5ModuleError
+    from library.module_utils.network.f5.common import AnsibleF5Parameters
+    from library.module_utils.network.f5.common import fq_name
+    from library.module_utils.network.f5.common import f5_argument_spec
+    from library.module_utils.network.f5.common import transform_name
+    from library.module_utils.network.f5.ipaddress import is_valid_ip
+    from library.module_utils.network.f5.ipaddress import compress_address
+    from library.module_utils.network.f5.compare import cmp_str_with_none
 except ImportError:
-    HAS_NETADDR = False
+    from ansible.module_utils.network.f5.bigip import F5RestClient
+    from ansible.module_utils.network.f5.common import F5ModuleError
+    from ansible.module_utils.network.f5.common import AnsibleF5Parameters
+    from ansible.module_utils.network.f5.common import fq_name
+    from ansible.module_utils.network.f5.common import f5_argument_spec
+    from ansible.module_utils.network.f5.common import transform_name
+    from ansible.module_utils.network.f5.ipaddress import is_valid_ip
+    from ansible.module_utils.network.f5.ipaddress import compress_address
+    from ansible.module_utils.network.f5.compare import cmp_str_with_none
 
 
-class BigIpSnatPoolManager(object):
-    def __init__(self, *args, **kwargs):
-        self.changed_params = dict()
-        self.params = kwargs
-        self.api = None
+class Parameters(AnsibleF5Parameters):
+    api_map = {}
 
-    def apply_changes(self):
-        result = dict()
+    updatables = [
+        'members',
+        'description',
+    ]
 
-        changed = self.apply_to_running_config()
-        if changed:
-            self.save_running_config()
+    returnables = [
+        'members',
+        'description',
+    ]
 
-        result.update(**self.changed_params)
-        result.update(dict(changed=changed))
+    api_attributes = [
+        'members',
+        'description',
+    ]
+
+
+class ApiParameters(Parameters):
+    pass
+
+
+class ModuleParameters(Parameters):
+    def _clear_member_prefix(self, member):
+        result = os.path.basename(member)
         return result
 
-    def apply_to_running_config(self):
+    def _format_member_address(self, member):
+        if len(member.split('%')) > 1:
+            address, rd = member.split('%')
+            if is_valid_ip(address):
+                result = '/{0}/{1}%{2}'.format(self.partition, compress_address(address), rd)
+                return result
+        else:
+            if is_valid_ip(member):
+                address = '/{0}/{1}'.format(self.partition, member)
+                return address
+            else:
+                # names must start with alphabetic character, and can contain hyphens and underscores and numbers
+                # no special characters are allowed
+                pattern = re.compile(r'(?!-)[A-Z-].*(?<!-)$', re.IGNORECASE)
+                if pattern.match(member):
+                    address = '/{0}/{1}'.format(self.partition, member)
+                    return address
+        raise F5ModuleError(
+            'The provided member address: {0} is not a valid IP address or snat translation name'.format(member)
+        )
+
+    @property
+    def members(self):
+        if self._values['members'] is None:
+            return None
+        result = set()
+        for member in self._values['members']:
+            member = self._clear_member_prefix(member)
+            address = self._format_member_address(member)
+            result.update([address])
+        return list(result)
+
+    @property
+    def description(self):
+        if self._values['description'] is None:
+            return None
+        elif self._values['description'] in ['none', '']:
+            return ''
+        return self._values['description']
+
+
+class Changes(Parameters):
+    def to_return(self):
+        result = {}
+        for returnable in self.returnables:
+            try:
+                result[returnable] = getattr(self, returnable)
+            except Exception:
+                pass
+            result = self._filter_params(result)
+        return result
+
+
+class UsableChanges(Changes):
+    pass
+
+
+class ReportableChanges(Changes):
+    pass
+
+
+class Difference(object):
+    def __init__(self, want, have=None):
+        self.want = want
+        self.have = have
+
+    def compare(self, param):
         try:
-            self.api = self.connect_to_bigip(**self.params)
-            if self.params['state'] == "present":
-                return self.present()
-            elif self.params['state'] == "absent":
-                return self.absent()
-        except iControlUnexpectedHTTPError as e:
-            raise F5ModuleError(str(e))
+            result = getattr(self, param)
+            return result
+        except AttributeError:
+            return self.__default(param)
 
-    def save_running_config(self):
-        self.api.tm.sys.config.exec_cmd('save')
+    def __default(self, param):
+        attr1 = getattr(self.want, param)
+        try:
+            attr2 = getattr(self.have, param)
+            if attr1 != attr2:
+                return attr1
+        except AttributeError:
+            return attr1
 
-    def present(self):
-        if self.params['members'] is None:
-            raise F5ModuleError(
-                "The members parameter must be specified"
+    @property
+    def members(self):
+        if self.want.members is None:
+            return None
+        if set(self.want.members) == set(self.have.members):
+            return None
+        result = list(set(self.want.members))
+        return result
+
+    @property
+    def description(self):
+        result = cmp_str_with_none(self.want.description, self.have.description)
+        return result
+
+
+class ModuleManager(object):
+    def __init__(self, *args, **kwargs):
+        self.module = kwargs.get('module', None)
+        self.client = F5RestClient(**self.module.params)
+        self.want = ModuleParameters(params=self.module.params)
+        self.have = ApiParameters()
+        self.changes = UsableChanges()
+
+    def _announce_deprecations(self, result):
+        warnings = result.pop('__warnings', [])
+        for warning in warnings:
+            self.module.deprecate(
+                msg=warning['msg'],
+                version=warning['version']
             )
 
-        if self.snat_pool_exists():
-            return self.update_snat_pool()
+    def _set_changed_options(self):
+        changed = {}
+        for key in Parameters.returnables:
+            if getattr(self.want, key) is not None:
+                changed[key] = getattr(self.want, key)
+        if changed:
+            self.changes = UsableChanges(params=changed)
+
+    def _update_changed_options(self):
+        diff = Difference(self.want, self.have)
+        updatables = Parameters.updatables
+        changed = dict()
+        for k in updatables:
+            change = diff.compare(k)
+            if change is None:
+                continue
+            else:
+                if isinstance(change, dict):
+                    changed.update(change)
+                else:
+                    changed[k] = change
+        if changed:
+            self.changes = UsableChanges(params=changed)
+            return True
+        return False
+
+    def exec_module(self):
+        changed = False
+        result = dict()
+        state = self.want.state
+
+        if state == "present":
+            changed = self.present()
+        elif state == "absent":
+            changed = self.absent()
+
+        reportable = ReportableChanges(params=self.changes.to_return())
+        changes = reportable.to_return()
+        result.update(**changes)
+
+        if self.module._diff and self.have:
+            result['diff'] = self.make_diff()
+
+        result.update(dict(changed=changed))
+        self._announce_deprecations(result)
+
+        return result
+
+    def _grab_attr(self, item):
+        result = dict()
+        updatables = Parameters.updatables
+        for k in updatables:
+            if getattr(item, k) is not None:
+                result[k] = getattr(item, k)
+        return result
+
+    def make_diff(self):
+        result = dict(before=self._grab_attr(self.have), after=self._grab_attr(self.want))
+        return result
+
+    def present(self):
+        if self.exists():
+            return self.update()
         else:
-            return self.ensure_snat_pool_is_present()
+            return self.create()
 
     def absent(self):
         changed = False
-        if self.snat_pool_exists():
-            changed = self.ensure_snat_pool_is_absent()
+        if self.exists():
+            changed = self.remove()
         return changed
 
-    def connect_to_bigip(self, **kwargs):
-        return ManagementRoot(kwargs['server'],
-                              kwargs['user'],
-                              kwargs['password'],
-                              port=kwargs['server_port'])
+    def should_update(self):
+        result = self._update_changed_options()
+        if result:
+            return True
+        return False
 
-    def read_snat_pool_information(self):
-        pool = self.load_snat_pool()
-        return self.format_snat_pool_information(pool)
-
-    def format_snat_pool_information(self, pool):
-        """Ensure that the pool information is in a standard format
-
-        The SDK provides information back in a format that may change with
-        the version of BIG-IP being worked with. Therefore, we need to make
-        sure that the data is formatted in a way that our module expects it.
-
-        Additionally, this takes care of minor variations between Python 2
-        and Python 3.
-
-        :param pool:
-        :return:
-        """
-        result = dict()
-        result['name'] = str(pool.name)
-        if hasattr(pool, 'members'):
-            result['members'] = self.format_current_members(pool)
-        return result
-
-    def format_current_members(self, pool):
-        result = set()
-        partition_prefix = "/{0}/".format(self.params['partition'])
-
-        for member in pool.members:
-            member = str(member.replace(partition_prefix, ''))
-            result.update([member])
-        return list(result)
-
-    def load_snat_pool(self):
-        return self.api.tm.ltm.snatpools.snatpool.load(
-            name=self.params['name'],
-            partition=self.params['partition']
-        )
-
-    def snat_pool_exists(self):
-        return self.api.tm.ltm.snatpools.snatpool.exists(
-            name=self.params['name'],
-            partition=self.params['partition']
-        )
-
-    def update_snat_pool(self):
-        params = self.get_changed_parameters()
-        if params:
-            self.changed_params = camel_dict_to_snake_dict(params)
-            if self.params['check_mode']:
-                return True
-        else:
+    def update(self):
+        self.have = self.read_current_from_device()
+        if not self.should_update():
             return False
-        params['name'] = self.params['name']
-        params['partition'] = self.params['partition']
-        self.update_snat_pool_on_device(params)
+        if self.module.check_mode:
+            return True
+        self.update_on_device()
         return True
 
-    def update_snat_pool_on_device(self, params):
-        tx = self.api.tm.transactions.transaction
-        with TransactionContextManager(tx) as api:
-            r = api.tm.ltm.snatpools.snatpool.load(
-                name=self.params['name'],
-                partition=self.params['partition']
-            )
-            r.modify(**params)
-
-    def get_changed_parameters(self):
-        result = dict()
-        current = self.read_snat_pool_information()
-        if self.are_members_changed(current):
-            result['members'] = self.get_new_member_list(current['members'])
-        return result
-
-    def are_members_changed(self, current):
-        if self.params['members'] is None:
-            return False
-        if 'members' not in current:
+    def create(self):
+        self._set_changed_options()
+        if self.module.check_mode:
             return True
-        if set(self.params['members']) == set(current['members']):
-            return False
-        if not self.params['append']:
-            return True
-
-        # Checking to see if the supplied list is a subset of the current
-        # list is only relevant if the `append` parameter is provided.
-        new_members = set(self.params['members'])
-        current_members = set(current['members'])
-        if new_members.issubset(current_members):
-            return False
-        else:
-            return True
-
-    def get_new_member_list(self, current_members):
-        result = set()
-
-        if self.params['append']:
-            result.update(set(current_members))
-            result.update(set(self.params['members']))
-        else:
-            result.update(set(self.params['members']))
-        return list(result)
-
-    def ensure_snat_pool_is_present(self):
-        params = self.get_snat_pool_creation_parameters()
-        self.changed_params = camel_dict_to_snake_dict(params)
-        if self.params['check_mode']:
-            return True
-        self.create_snat_pool_on_device(params)
-        if self.snat_pool_exists():
-            return True
-        else:
+        self.create_on_device()
+        if not self.exists():
             raise F5ModuleError("Failed to create the SNAT pool")
+        return True
 
-    def get_snat_pool_creation_parameters(self):
-        members = self.get_formatted_members_list()
-        return dict(
-            name=self.params['name'],
-            partition=self.params['partition'],
-            members=members
-        )
-
-    def get_formatted_members_list(self):
-        result = set()
-        try:
-            for ip in self.params['members']:
-                address = str(IPAddress(ip))
-                result.update([address])
-            return list(result)
-        except AddrFormatError:
-            raise F5ModuleError(
-                'The provided member address is not a valid IP address'
-            )
-
-    def create_snat_pool_on_device(self, params):
-        tx = self.api.tm.transactions.transaction
-        with TransactionContextManager(tx) as api:
-            api.tm.ltm.snatpools.snatpool.create(**params)
-
-    def ensure_snat_pool_is_absent(self):
-        if self.params['check_mode']:
+    def remove(self):
+        if self.module.check_mode:
             return True
-        self.delete_snat_pool_from_device()
-        if self.snat_pool_exists():
+        self.remove_from_device()
+        if self.exists():
             raise F5ModuleError("Failed to delete the SNAT pool")
         return True
 
-    def delete_snat_pool_from_device(self):
-        tx = self.api.tm.transactions.transaction
-        with TransactionContextManager(tx) as api:
-            pool = api.tm.ltm.snatpools.snatpool.load(
-                name=self.params['name'],
-                partition=self.params['partition']
-            )
-            pool.delete()
+    def exists(self):
+        uri = "https://{0}:{1}/mgmt/tm/ltm/snatpool/{2}".format(
+            self.client.provider['server'],
+            self.client.provider['server_port'],
+            transform_name(self.want.partition, self.want.name)
+        )
+        resp = self.client.api.get(uri)
+        try:
+            response = resp.json()
+        except ValueError:
+            return False
+        if resp.status == 404 or 'code' in response and response['code'] == 404:
+            return False
+        return True
+
+    def create_on_device(self):
+        params = self.changes.api_params()
+        params['name'] = self.want.name
+        params['partition'] = self.want.partition
+        uri = "https://{0}:{1}/mgmt/tm/ltm/snatpool/".format(
+            self.client.provider['server'],
+            self.client.provider['server_port']
+        )
+        resp = self.client.api.post(uri, json=params)
+        try:
+            response = resp.json()
+        except ValueError as ex:
+            raise F5ModuleError(str(ex))
+
+        if 'code' in response and response['code'] in [400, 403]:
+            if 'message' in response:
+                raise F5ModuleError(response['message'])
+            else:
+                raise F5ModuleError(resp.content)
+        return response['selfLink']
+
+    def update_on_device(self):
+        params = self.changes.api_params()
+        uri = "https://{0}:{1}/mgmt/tm/ltm/snatpool/{2}".format(
+            self.client.provider['server'],
+            self.client.provider['server_port'],
+            transform_name(self.want.partition, self.want.name)
+        )
+        resp = self.client.api.patch(uri, json=params)
+        try:
+            response = resp.json()
+        except ValueError as ex:
+            raise F5ModuleError(str(ex))
+
+        if 'code' in response and response['code'] == 400:
+            if 'message' in response:
+                raise F5ModuleError(response['message'])
+            else:
+                raise F5ModuleError(resp.content)
+
+    def remove_from_device(self):
+        uri = "https://{0}:{1}/mgmt/tm/ltm/snatpool/{2}".format(
+            self.client.provider['server'],
+            self.client.provider['server_port'],
+            transform_name(self.want.partition, self.want.name)
+        )
+        response = self.client.api.delete(uri)
+        if response.status == 200:
+            return True
+        raise F5ModuleError(response.content)
+
+    def read_current_from_device(self):
+        uri = "https://{0}:{1}/mgmt/tm/ltm/snatpool/{2}".format(
+            self.client.provider['server'],
+            self.client.provider['server_port'],
+            transform_name(self.want.partition, self.want.name)
+        )
+        query = '?expandSubcollections=true'
+        resp = self.client.api.get(uri + query)
+        try:
+            response = resp.json()
+        except ValueError as ex:
+            raise F5ModuleError(str(ex))
+
+        if 'code' in response and response['code'] == 400:
+            if 'message' in response:
+                raise F5ModuleError(response['message'])
+            else:
+                raise F5ModuleError(resp.content)
+        return ApiParameters(params=response)
 
 
-class BigIpSnatPoolModuleConfig(object):
+class ArgumentSpec(object):
     def __init__(self):
-        self.argument_spec = dict()
-        self.meta_args = dict()
         self.supports_check_mode = True
-        self.states = ['absent', 'present']
-
-        self.initialize_meta_args()
-        self.initialize_argument_spec()
-
-    def initialize_meta_args(self):
-        args = dict(
-            append=dict(
-                default=False,
-                type='bool',
-                choices=BOOLEANS
-            ),
+        argument_spec = dict(
             name=dict(required=True),
             members=dict(
-                required=False,
-                default=None,
                 type='list',
                 aliases=['member']
             ),
+            description=dict(),
             state=dict(
                 default='present',
-                choices=self.states
+                choices=['absent', 'present']
+            ),
+            partition=dict(
+                default='Common',
+                fallback=(env_fallback, ['F5_PARTITION'])
             )
         )
-        self.meta_args = args
-
-    def initialize_argument_spec(self):
-        self.argument_spec = f5_argument_spec()
-        self.argument_spec.update(self.meta_args)
-
-    def create(self):
-        return AnsibleModule(
-            argument_spec=self.argument_spec,
-            supports_check_mode=self.supports_check_mode
-        )
+        self.argument_spec = {}
+        self.argument_spec.update(f5_argument_spec)
+        self.argument_spec.update(argument_spec)
+        self.required_if = [
+            ['state', 'present', ['members']]
+        ]
 
 
 def main():
-    if not HAS_F5SDK:
-        raise F5ModuleError("The python f5-sdk module is required")
+    spec = ArgumentSpec()
 
-    if not HAS_NETADDR:
-        raise F5ModuleError("The python netaddr module is required")
-
-    config = BigIpSnatPoolModuleConfig()
-    module = config.create()
+    module = AnsibleModule(
+        argument_spec=spec.argument_spec,
+        supports_check_mode=spec.supports_check_mode,
+        required_if=spec.required_if
+    )
 
     try:
-        obj = BigIpSnatPoolManager(
-            check_mode=module.check_mode, **module.params
-        )
-        result = obj.apply_changes()
+        mm = ModuleManager(module=module)
+        results = mm.exec_module()
+        module.exit_json(**results)
+    except F5ModuleError as ex:
+        module.fail_json(msg=str(ex))
 
-        module.exit_json(**result)
-    except F5ModuleError as e:
-        module.fail_json(msg=str(e))
-
-from ansible.module_utils.basic import *
-from ansible.module_utils.ec2 import camel_dict_to_snake_dict
-from ansible.module_utils.f5_utils import *
 
 if __name__ == '__main__':
     main()

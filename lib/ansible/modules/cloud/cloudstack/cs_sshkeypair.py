@@ -2,23 +2,9 @@
 # -*- coding: utf-8 -*-
 #
 # (c) 2015, René Moser <mail@renemoser.net>
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible. If not, see <http://www.gnu.org/licenses/>.
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['stableinterface'],
                     'supported_by': 'community'}
 
@@ -32,58 +18,55 @@ description:
     - If no key was found and no public key was provided and a new SSH
       private/public key pair will be created and the private key will be returned.
 version_added: '2.0'
-author: "René Moser (@resmo)"
+author: René Moser (@resmo)
 options:
   name:
     description:
       - Name of public key.
+    type: str
     required: true
   domain:
     description:
       - Domain the public key is related to.
-    required: false
-    default: null
+    type: str
   account:
     description:
       - Account the public key is related to.
-    required: false
-    default: null
+    type: str
   project:
     description:
       - Name of the project the public key to be registered in.
-    required: false
-    default: null
+    type: str
   state:
     description:
       - State of the public key.
-    required: false
-    default: 'present'
-    choices: [ 'present', 'absent' ]
+    type: str
+    default: present
+    choices: [ present, absent ]
   public_key:
     description:
       - String of the public key.
-    required: false
-    default: null
+    type: str
 extends_documentation_fragment: cloudstack
 '''
 
 EXAMPLES = '''
-# create a new private / public key pair:
-- cs_sshkeypair:
+- name: create a new private / public key pair
+  cs_sshkeypair:
     name: linus@example.com
   delegate_to: localhost
   register: key
 - debug:
     msg: 'Private key is {{ key.private_key }}'
 
-# remove a public key by its name:
-- cs_sshkeypair:
+- name: remove a public key by its name
+  cs_sshkeypair:
     name: linus@example.com
     state: absent
   delegate_to: localhost
 
-# register your existing local public key:
-- cs_sshkeypair:
+- name: register your existing local public key
+  cs_sshkeypair:
     name: linus@example.com
     public_key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
   delegate_to: localhost
@@ -94,36 +77,39 @@ RETURN = '''
 id:
   description: UUID of the SSH public key.
   returned: success
-  type: string
+  type: str
   sample: a6f7a5fc-43f8-11e5-a151-feff819cdc9f
 name:
   description: Name of the SSH public key.
   returned: success
-  type: string
+  type: str
   sample: linus@example.com
 fingerprint:
   description: Fingerprint of the SSH public key.
   returned: success
-  type: string
+  type: str
   sample: "86:5e:a3:e8:bd:95:7b:07:7c:c2:5c:f7:ad:8b:09:28"
 private_key:
   description: Private key of generated SSH keypair.
   returned: changed
-  type: string
+  type: str
   sample: "-----BEGIN RSA PRIVATE KEY-----\nMII...8tO\n-----END RSA PRIVATE KEY-----\n"
 '''
 
+import traceback
+
+SSHPUBKEYS_IMP_ERR = None
 try:
     import sshpubkeys
     HAS_LIB_SSHPUBKEYS = True
 except ImportError:
+    SSHPUBKEYS_IMP_ERR = traceback.format_exc()
     HAS_LIB_SSHPUBKEYS = False
 
-from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils.basic import AnsibleModule, missing_required_lib
 from ansible.module_utils._text import to_native
 from ansible.module_utils.cloudstack import (
     AnsibleCloudStack,
-    CloudStackException,
     cs_required_together,
     cs_argument_spec
 )
@@ -150,7 +136,7 @@ class AnsibleCloudStackSshKey(AnsibleCloudStack):
             args['publickey'] = public_key
             if not self.module.check_mode:
                 args['name'] = name
-                res = self.cs.registerSSHKeyPair(**args)
+                res = self.query_api('registerSSHKeyPair', **args)
         else:
             fingerprint = self._get_ssh_fingerprint(public_key)
             if ssh_key['fingerprint'] != fingerprint:
@@ -158,26 +144,26 @@ class AnsibleCloudStackSshKey(AnsibleCloudStack):
                 if not self.module.check_mode:
                     # delete the ssh key with matching name but wrong fingerprint
                     args['name'] = name
-                    self.cs.deleteSSHKeyPair(**args)
+                    self.query_api('deleteSSHKeyPair', **args)
 
             elif ssh_key['name'].lower() != name.lower():
                 self.result['changed'] = True
                 if not self.module.check_mode:
                     # delete the ssh key with matching fingerprint but wrong name
                     args['name'] = ssh_key['name']
-                    self.cs.deleteSSHKeyPair(**args)
-                    # First match for key retrievment will be the fingerprint.
+                    self.query_api('deleteSSHKeyPair', **args)
+                    # First match for key retrievement will be the fingerprint.
                     # We need to make another lookup if there is a key with identical name.
                     self.ssh_key = None
                     ssh_key = self.get_ssh_key()
-                    if ssh_key['fingerprint'] != fingerprint:
+                    if ssh_key and ssh_key['fingerprint'] != fingerprint:
                         args['name'] = name
-                        self.cs.deleteSSHKeyPair(**args)
+                        self.query_api('deleteSSHKeyPair', **args)
 
             if not self.module.check_mode and self.result['changed']:
                 args['publickey'] = public_key
                 args['name'] = name
-                res = self.cs.registerSSHKeyPair(**args)
+                res = self.query_api('registerSSHKeyPair', **args)
 
         if res and 'keypair' in res:
             ssh_key = res['keypair']
@@ -191,7 +177,7 @@ class AnsibleCloudStackSshKey(AnsibleCloudStack):
             args = self._get_common_args()
             args['name'] = self.module.params.get('name')
             if not self.module.check_mode:
-                res = self.cs.createSSHKeyPair(**args)
+                res = self.query_api('createSSHKeyPair', **args)
                 ssh_key = res['keypair']
         return ssh_key
 
@@ -202,7 +188,7 @@ class AnsibleCloudStackSshKey(AnsibleCloudStack):
             args = self._get_common_args()
             args['name'] = name or self.module.params.get('name')
             if not self.module.check_mode:
-                self.cs.deleteSSHKeyPair(**args)
+                self.query_api('deleteSSHKeyPair', **args)
         return ssh_key
 
     def _get_common_args(self):
@@ -219,14 +205,14 @@ class AnsibleCloudStackSshKey(AnsibleCloudStack):
                 # Query by fingerprint of the public key
                 args_fingerprint = self._get_common_args()
                 args_fingerprint['fingerprint'] = self._get_ssh_fingerprint(public_key)
-                ssh_keys = self.cs.listSSHKeyPairs(**args_fingerprint)
+                ssh_keys = self.query_api('listSSHKeyPairs', **args_fingerprint)
                 if ssh_keys and 'sshkeypair' in ssh_keys:
                     self.ssh_key = ssh_keys['sshkeypair'][0]
             # When key has not been found by fingerprint, use the name
             if not self.ssh_key:
                 args_name = self._get_common_args()
                 args_name['name'] = self.module.params.get('name')
-                ssh_keys = self.cs.listSSHKeyPairs(**args_name)
+                ssh_keys = self.query_api('listSSHKeyPairs', **args_name)
                 if ssh_keys and 'sshkeypair' in ssh_keys:
                     self.ssh_key = ssh_keys['sshkeypair'][0]
         return self.ssh_key
@@ -256,25 +242,20 @@ def main():
     )
 
     if not HAS_LIB_SSHPUBKEYS:
-        module.fail_json(msg="python library sshpubkeys required: pip install sshpubkeys")
+        module.fail_json(msg=missing_required_lib("sshpubkeys"), exception=SSHPUBKEYS_IMP_ERR)
 
-    try:
-        acs_sshkey = AnsibleCloudStackSshKey(module)
-        state = module.params.get('state')
-        if state in ['absent']:
-            ssh_key = acs_sshkey.remove_ssh_key()
+    acs_sshkey = AnsibleCloudStackSshKey(module)
+    state = module.params.get('state')
+    if state in ['absent']:
+        ssh_key = acs_sshkey.remove_ssh_key()
+    else:
+        public_key = module.params.get('public_key')
+        if public_key:
+            ssh_key = acs_sshkey.register_ssh_key(public_key)
         else:
-            public_key = module.params.get('public_key')
-            if public_key:
-                ssh_key = acs_sshkey.register_ssh_key(public_key)
-            else:
-                ssh_key = acs_sshkey.create_ssh_key()
+            ssh_key = acs_sshkey.create_ssh_key()
 
-        result = acs_sshkey.get_result(ssh_key)
-
-    except CloudStackException as e:
-        module.fail_json(msg='CloudStackException: %s' % str(e))
-
+    result = acs_sshkey.get_result(ssh_key)
     module.exit_json(**result)
 
 

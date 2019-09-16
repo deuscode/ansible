@@ -1,26 +1,13 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 # Copyright (c) 2012, Jim Richardson <weaselkeeper@gmail.com>
-# All rights reserved.
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-###
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
 
@@ -49,9 +36,14 @@ options:
     description:
       - Pushover issued authentication key for your user.
     required: true
+  title:
+    description:
+      - Message title.
+    required: false
+    version_added: "2.8"
   pri:
     description:
-      - Message priority (see U(https://pushover.net) for details.)
+      - Message priority (see U(https://pushover.net) for details).
     required: false
 
 author: "Jim Richardson (@weaselkeeper)"
@@ -59,13 +51,23 @@ author: "Jim Richardson (@weaselkeeper)"
 
 EXAMPLES = '''
 - pushover:
+    msg: '{{ inventory_hostname }} is acting strange ...'
+    app_token: wxfdksl
+    user_key: baa5fe97f2c5ab3ca8f0bb59
+  delegate_to: localhost
+
+- pushover:
+    title: 'Alert!'
     msg: '{{ inventory_hostname }} has exploded in flames, It is now time to panic'
+    pri: 1
     app_token: wxfdksl
     user_key: baa5fe97f2c5ab3ca8f0bb59
   delegate_to: localhost
 '''
 
+from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.six.moves.urllib.parse import urlencode
+from ansible.module_utils.urls import fetch_url
 
 
 class Pushover(object):
@@ -77,19 +79,24 @@ class Pushover(object):
         self.user = user
         self.token = token
 
-    def run(self, priority, msg):
+    def run(self, priority, msg, title):
         ''' Do, whatever it is, we do. '''
 
         url = '%s/1/messages.json' % (self.base_uri)
 
         # parse config
         options = dict(user=self.user,
-                token=self.token,
-                priority=priority,
-                message=msg)
+                       token=self.token,
+                       priority=priority,
+                       message=msg)
+
+        if title is not None:
+            options = dict(options,
+                           title=title)
+
         data = urlencode(options)
 
-        headers = { "Content-type": "application/x-www-form-urlencoded"}
+        headers = {"Content-type": "application/x-www-form-urlencoded"}
         r, info = fetch_url(self.module, url, method='POST', data=data, headers=headers)
         if info['status'] != 200:
             raise Exception(info)
@@ -101,23 +108,22 @@ def main():
 
     module = AnsibleModule(
         argument_spec=dict(
+            title=dict(type='str'),
             msg=dict(required=True),
             app_token=dict(required=True, no_log=True),
             user_key=dict(required=True, no_log=True),
-            pri=dict(required=False, default='0', choices=['-2','-1','0','1','2']),
+            pri=dict(required=False, default='0', choices=['-2', '-1', '0', '1', '2']),
         ),
     )
 
     msg_object = Pushover(module, module.params['user_key'], module.params['app_token'])
     try:
-        response = msg_object.run(module.params['pri'], module.params['msg'])
-    except:
+        response = msg_object.run(module.params['pri'], module.params['msg'], module.params['title'])
+    except Exception:
         module.fail_json(msg='Unable to send msg via pushover')
 
     module.exit_json(msg='message sent successfully: %s' % response, changed=False)
 
-# import module snippets
-from ansible.module_utils.basic import *
-from ansible.module_utils.urls import *
+
 if __name__ == '__main__':
     main()

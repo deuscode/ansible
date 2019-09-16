@@ -2,23 +2,9 @@
 # -*- coding: utf-8 -*-
 #
 # (c) 2016, René Moser <mail@renemoser.net>
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible. If not, see <http://www.gnu.org/licenses/>.
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
 
@@ -29,48 +15,47 @@ module: cs_region
 short_description: Manages regions on Apache CloudStack based clouds.
 description:
     - Add, update and remove regions.
-version_added: "2.3"
-author: "René Moser (@resmo)"
+version_added: '2.3'
+author: René Moser (@resmo)
 options:
   id:
     description:
       - ID of the region.
       - Must be an number (int).
+    type: int
     required: true
   name:
     description:
       - Name of the region.
-      - Required if C(state=present)
-    required: false
-    default: null
+      - Required if I(state=present)
+    type: str
   endpoint:
     description:
       - Endpoint URL of the region.
-      - Required if C(state=present)
-    required: false
-    default: null
+      - Required if I(state=present)
+    type: str
   state:
     description:
       - State of the region.
-    required: false
-    default: 'present'
-    choices: [ 'present', 'absent' ]
+    type: str
+    default: present
+    choices: [ present, absent ]
 extends_documentation_fragment: cloudstack
 '''
 
 EXAMPLES = '''
-# create a region
-local_action:
-  module: cs_region
-  id: 2
-  name: geneva
-  endpoint: https://cloud.gva.example.com
+- name: create a region
+  cs_region:
+    id: 2
+    name: geneva
+    endpoint: https://cloud.gva.example.com
+  delegate_to: localhost
 
-# remove a region with ID 2
-local_action:
-  module: cs_region
-  id: 2
-  state: absent
+- name: remove a region with ID 2
+  cs_region:
+    id: 2
+    state: absent
+  delegate_to: localhost
 '''
 
 RETURN = '''
@@ -83,12 +68,12 @@ id:
 name:
   description: Name of the region.
   returned: success
-  type: string
+  type: str
   sample: local
 endpoint:
   description: Endpoint of the region.
   returned: success
-  type: string
+  type: str
   sample: http://cloud.example.com
 gslb_service_enabled:
   description: Whether the GSLB service is enabled or not.
@@ -106,7 +91,6 @@ portable_ip_service_enabled:
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.cloudstack import (
     AnsibleCloudStack,
-    CloudStackException,
     cs_argument_spec,
     cs_required_together
 )
@@ -124,7 +108,7 @@ class AnsibleCloudStackRegion(AnsibleCloudStack):
 
     def get_region(self):
         id = self.module.params.get('id')
-        regions = self.cs.listRegions(id=id)
+        regions = self.query_api('listRegions', id=id)
         if regions:
             return regions['region'][0]
         return None
@@ -145,9 +129,7 @@ class AnsibleCloudStackRegion(AnsibleCloudStack):
             'endpoint': self.module.params.get('endpoint')
         }
         if not self.module.check_mode:
-            res = self.cs.addRegion(**args)
-            if 'errortext' in res:
-                self.module.fail_json(msg="Failed: '%s'" % res['errortext'])
+            res = self.query_api('addRegion', **args)
             region = res['region']
         return region
 
@@ -160,9 +142,7 @@ class AnsibleCloudStackRegion(AnsibleCloudStack):
         if self.has_changed(args, region):
             self.result['changed'] = True
             if not self.module.check_mode:
-                res = self.cs.updateRegion(**args)
-                if 'errortext' in res:
-                    self.module.fail_json(msg="Failed: '%s'" % res['errortext'])
+                res = self.query_api('updateRegion', **args)
                 region = res['region']
         return region
 
@@ -171,9 +151,7 @@ class AnsibleCloudStackRegion(AnsibleCloudStack):
         if region:
             self.result['changed'] = True
             if not self.module.check_mode:
-                res = self.cs.removeRegion(id=region['id'])
-                if 'errortext' in res:
-                    self.module.fail_json(msg="Failed: '%s'" % res['errortext'])
+                self.query_api('removeRegion', id=region['id'])
         return region
 
 
@@ -195,20 +173,15 @@ def main():
         supports_check_mode=True
     )
 
-    try:
-        acs_region = AnsibleCloudStackRegion(module)
+    acs_region = AnsibleCloudStackRegion(module)
 
-        state = module.params.get('state')
-        if state == 'absent':
-            region = acs_region.absent_region()
-        else:
-            region = acs_region.present_region()
+    state = module.params.get('state')
+    if state == 'absent':
+        region = acs_region.absent_region()
+    else:
+        region = acs_region.present_region()
 
-        result = acs_region.get_result(region)
-
-    except CloudStackException as e:
-        module.fail_json(msg='CloudStackException: %s' % str(e))
-
+    result = acs_region.get_result(region)
     module.exit_json(**result)
 
 

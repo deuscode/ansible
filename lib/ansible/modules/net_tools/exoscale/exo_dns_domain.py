@@ -2,23 +2,13 @@
 # -*- coding: utf-8 -*-
 #
 # (c) 2016, René Moser <mail@renemoser.net>
-#
-# This file is part of Ansible
-#
-# Ansible is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Ansible is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Ansible. If not, see <http://www.gnu.org/licenses/>.
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+from __future__ import absolute_import, division, print_function
+__metaclass__ = type
+
+
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
 
@@ -36,62 +26,23 @@ options:
     description:
       - Name of the record.
     required: true
+    type: str
   state:
     description:
       - State of the resource.
-    required: false
-    default: 'present'
-    choices: [ 'present', 'absent' ]
-  api_key:
-    description:
-      - API key of the Exoscale DNS API.
-    required: false
-    default: null
-  api_secret:
-    description:
-      - Secret key of the Exoscale DNS API.
-    required: false
-    default: null
-  api_timeout:
-    description:
-      - HTTP timeout to Exoscale DNS API.
-    required: false
-    default: 10
-  api_region:
-    description:
-      - Name of the ini section in the C(cloustack.ini) file.
-    required: false
-    default: cloudstack
-  validate_certs:
-    description:
-      - Validate SSL certs of the Exoscale DNS API.
-    required: false
-    default: true
-requirements:
-  - "python >= 2.6"
-notes:
-  - As Exoscale DNS uses the same API key and secret for all services, we reuse the config used for Exscale Compute based on CloudStack.
-    The config is read from several locations, in the following order.
-    The C(CLOUDSTACK_KEY), C(CLOUDSTACK_SECRET) environment variables.
-    A C(CLOUDSTACK_CONFIG) environment variable pointing to an C(.ini) file,
-    A C(cloudstack.ini) file in the current working directory.
-    A C(.cloudstack.ini) file in the users home directory.
-    Optionally multiple credentials and endpoints can be specified using ini sections in C(cloudstack.ini).
-    Use the argument C(api_region) to select the section name, default section is C(cloudstack).
-  - This module does not support multiple A records and will complain properly if you try.
-  - More information Exoscale DNS can be found on https://community.exoscale.ch/documentation/dns/.
-  - This module supports check mode and diff.
+    default: present
+    choices: [ present, absent ]
+    type: str
+extends_documentation_fragment: exoscale
 '''
 
 EXAMPLES = '''
-# Create a domain.
-- local_action:
-    module: exo_dns_domain
+- name: Create a domain
+  exo_dns_domain:
     name: example.com
 
-# Remove a domain.
-- local_action:
-    module: exo_dns_domain
+- name: Remove a domain
+  exo_dns_domain:
     name: example.com
     state: absent
 '''
@@ -116,12 +67,12 @@ exo_dns_domain:
         created_at:
             description: When the domain was created
             returned: success
-            type: string
+            type: str
             sample: "2016-08-12T15:24:23.989Z"
         expires_on:
             description: When the domain expires
             returned: success
-            type: string
+            type: str
             sample: "2016-08-12T15:24:23.989Z"
         id:
             description: ID of the domain
@@ -136,7 +87,7 @@ exo_dns_domain:
         name:
             description: Domain name
             returned: success
-            type: string
+            type: str
             sample: example.com
         record_count:
             description: Number of records related to this domain
@@ -156,22 +107,22 @@ exo_dns_domain:
         state:
             description: State of the domain
             returned: success
-            type: string
+            type: str
             sample: "hosted"
         token:
             description: Token
             returned: success
-            type: string
+            type: str
             sample: "r4NzTRp6opIeFKfaFYvOd6MlhGyD07jl"
         unicode_name:
             description: Domain name as unicode
             returned: success
-            type: string
+            type: str
             sample: "example.com"
         updated_at:
             description: When the domain was updated last.
             returned: success
-            type: string
+            type: str
             sample: "2016-08-12T15:24:23.989Z"
         user_id:
             description: ID of the user
@@ -186,11 +137,7 @@ exo_dns_domain:
 '''
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible.module_utils.exoscale import (
-    ExoDns,
-    exo_dns_argument_spec,
-    exo_dns_required_together
-)
+from ansible.module_utils.exoscale import ExoDns, exo_dns_argument_spec, exo_dns_required_together
 
 
 class ExoDnsDomain(ExoDns):
@@ -238,8 +185,8 @@ class ExoDnsDomain(ExoDns):
 def main():
     argument_spec = exo_dns_argument_spec()
     argument_spec.update(dict(
-        name=dict(required=True),
-        state=dict(choices=['present', 'absent'], default='present'),
+        name=dict(type='str', required=True),
+        state=dict(type='str', choices=['present', 'absent'], default='present'),
     ))
 
     module = AnsibleModule(

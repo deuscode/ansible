@@ -9,7 +9,7 @@
 - name: verify setup vpc
   assert:
     that:
-    - vpc|success
+    - vpc is successful
 
 - name: setup network acl
   cs_network_acl:
@@ -20,7 +20,7 @@
 - name: verify setup network acl
   assert:
     that:
-    - acl|success
+    - acl is successful
 
 - name: setup network acl rule
   cs_network_acl_rule:
@@ -33,7 +33,7 @@
 - name: verify setup network acl rule
   assert:
     that:
-    - acl_rule|success
+    - acl_rule is successful
 
 - name: test fail missing params
   cs_network_acl_rule:
@@ -42,7 +42,7 @@
 - name: verify test fail missing param
   assert:
     that:
-    - acl_rule|failed
+    - acl_rule is failed
     - "acl_rule.msg.startswith('missing required arguments: ')"
 
 - name: test fail missing params for tcp
@@ -59,7 +59,7 @@
 - name: verify test fail missing param for tcp
   assert:
     that:
-    - acl_rule|failed
+    - acl_rule is failed
     - "acl_rule.msg == 'protocol is tcp but the following are missing: start_port, end_port'"
 
 - name: test fail missing params for icmp
@@ -77,7 +77,7 @@
 - name: verify test fail missing param for icmp
   assert:
     that:
-    - acl_rule|failed
+    - acl_rule is failed
     - "acl_rule.msg == 'protocol is icmp but the following are missing: icmp_type, icmp_code'"
 
 - name: test fail missing params for by number
@@ -95,7 +95,7 @@
 - name: verify test fail missing param for by number
   assert:
     that:
-    - acl_rule|failed
+    - acl_rule is failed
     - "acl_rule.msg == 'protocol is by_number but the following are missing: protocol_number'"
 
 - name: test create network acl rule in check mode
@@ -113,8 +113,8 @@
 - name: verify test create network acl rule in check mode
   assert:
     that:
-    - acl_rule|success
-    - acl_rule|changed
+    - acl_rule is successful
+    - acl_rule is changed
 
 - name: test create network acl rule
   cs_network_acl_rule:
@@ -130,8 +130,8 @@
 - name: verify test create network acl rule
   assert:
     that:
-    - acl_rule|success
-    - acl_rule|changed
+    - acl_rule is successful
+    - acl_rule is changed
     - acl_rule.vpc == "{{ cs_resource_prefix }}_vpc"
     - acl_rule.network_acl == "{{ cs_resource_prefix }}_acl"
     - acl_rule.start_port == 80
@@ -155,8 +155,8 @@
 - name: verify test create network acl idempotence
   assert:
     that:
-    - acl_rule|success
-    - not acl_rule|changed
+    - acl_rule is successful
+    - acl_rule is not changed
     - acl_rule.vpc == "{{ cs_resource_prefix }}_vpc"
     - acl_rule.network_acl == "{{ cs_resource_prefix }}_acl"
     - acl_rule.start_port == 80
@@ -174,21 +174,24 @@
     traffic_type: egress
     action_policy: deny
     port: 81
-    cidr: 0.0.0.0/0
+    cidrs:
+    - 1.2.3.0/24
+    - 3.2.1.0/24
     zone: "{{ cs_common_zone_adv }}"
   register: acl_rule
   check_mode: true
 - name: verify test change network acl rule in check mode
   assert:
     that:
-    - acl_rule|success
-    - acl_rule|changed
+    - acl_rule is successful
+    - acl_rule is changed
     - acl_rule.vpc == "{{ cs_resource_prefix }}_vpc"
     - acl_rule.network_acl == "{{ cs_resource_prefix }}_acl"
     - acl_rule.start_port == 80
     - acl_rule.end_port == 80
     - acl_rule.action_policy == "allow"
     - acl_rule.cidr == "0.0.0.0/0"
+    - acl_rule.cidrs == [ "0.0.0.0/0" ]
     - acl_rule.traffic_type == "ingress"
     - acl_rule.rule_position == 1
 
@@ -201,20 +204,23 @@
     action_policy: deny
     port: 81
     protocol: udp
-    cidr: 0.0.0.0/0
+    cidrs:
+    - 1.2.3.0/24
+    - 3.2.1.0/24
     zone: "{{ cs_common_zone_adv }}"
   register: acl_rule
 - name: verify test change network acl rule
   assert:
     that:
-    - acl_rule|success
-    - acl_rule|changed
+    - acl_rule is successful
+    - acl_rule is changed
     - acl_rule.vpc == "{{ cs_resource_prefix }}_vpc"
     - acl_rule.network_acl == "{{ cs_resource_prefix }}_acl"
     - acl_rule.start_port == 81
     - acl_rule.end_port == 81
     - acl_rule.action_policy == "deny"
-    - acl_rule.cidr == "0.0.0.0/0"
+    - acl_rule.cidr == "1.2.3.0/24,3.2.1.0/24"
+    - acl_rule.cidrs == [ "1.2.3.0/24", "3.2.1.0/24" ]
     - acl_rule.traffic_type == "egress"
     - acl_rule.protocol == "udp"
     - acl_rule.rule_position == 1
@@ -228,20 +234,23 @@
     action_policy: deny
     port: 81
     protocol: udp
-    cidr: 0.0.0.0/0
+    cidrs:
+    - 1.2.3.0/24
+    - 3.2.1.0/24
     zone: "{{ cs_common_zone_adv }}"
   register: acl_rule
 - name: verify test change network acl idempotence
   assert:
     that:
-    - acl_rule|success
-    - not acl_rule|changed
+    - acl_rule is successful
+    - acl_rule is not changed
     - acl_rule.vpc == "{{ cs_resource_prefix }}_vpc"
     - acl_rule.network_acl == "{{ cs_resource_prefix }}_acl"
     - acl_rule.start_port == 81
     - acl_rule.end_port == 81
     - acl_rule.action_policy == "deny"
-    - acl_rule.cidr == "0.0.0.0/0"
+    - acl_rule.cidr == "1.2.3.0/24,3.2.1.0/24"
+    - acl_rule.cidrs == [ "1.2.3.0/24", "3.2.1.0/24" ]
     - acl_rule.traffic_type == "egress"
     - acl_rule.protocol == "udp"
     - acl_rule.rule_position == 1
@@ -263,14 +272,14 @@
 - name: verify test change network acl by protocol number in check mode
   assert:
     that:
-    - acl_rule|success
-    - acl_rule|changed
+    - acl_rule is successful
+    - acl_rule is changed
     - acl_rule.vpc == "{{ cs_resource_prefix }}_vpc"
     - acl_rule.network_acl == "{{ cs_resource_prefix }}_acl"
     - acl_rule.start_port == 81
     - acl_rule.end_port == 81
     - acl_rule.action_policy == "deny"
-    - acl_rule.cidr == "0.0.0.0/0"
+    - acl_rule.cidr == "1.2.3.0/24,3.2.1.0/24"
     - acl_rule.traffic_type == "egress"
     - acl_rule.protocol == "udp"
     - acl_rule.rule_position == 1
@@ -291,8 +300,8 @@
 - name: verify test change network acl by protocol number
   assert:
     that:
-    - acl_rule|success
-    - acl_rule|changed
+    - acl_rule is successful
+    - acl_rule is changed
     - acl_rule.vpc == "{{ cs_resource_prefix }}_vpc"
     - acl_rule.network_acl == "{{ cs_resource_prefix }}_acl"
     - acl_rule.start_port == 81
@@ -320,8 +329,8 @@
 - name: verify test change network acl by protocol number idempotence
   assert:
     that:
-    - acl_rule|success
-    - not acl_rule|changed
+    - acl_rule is successful
+    - acl_rule is not changed
     - acl_rule.vpc == "{{ cs_resource_prefix }}_vpc"
     - acl_rule.network_acl == "{{ cs_resource_prefix }}_acl"
     - acl_rule.start_port == 81
@@ -349,8 +358,8 @@
 - name: verify test create 2nd network acl rule in check mode
   assert:
     that:
-    - acl_rule|success
-    - acl_rule|changed
+    - acl_rule is successful
+    - acl_rule is changed
 
 - name: test create 2nd network acl rule
   cs_network_acl_rule:
@@ -366,8 +375,8 @@
 - name: verify test create 2nd network acl rule
   assert:
     that:
-    - acl_rule|success
-    - acl_rule|changed
+    - acl_rule is successful
+    - acl_rule is changed
     - acl_rule.vpc == "{{ cs_resource_prefix }}_vpc"
     - acl_rule.network_acl == "{{ cs_resource_prefix }}_acl"
     - acl_rule.action_policy == "allow"
@@ -390,8 +399,8 @@
 - name: verify test create 2nd network acl rule idempotence
   assert:
     that:
-    - acl_rule|success
-    - not acl_rule|changed
+    - acl_rule is successful
+    - acl_rule is not changed
     - acl_rule.vpc == "{{ cs_resource_prefix }}_vpc"
     - acl_rule.network_acl == "{{ cs_resource_prefix }}_acl"
     - acl_rule.action_policy == "allow"
@@ -416,8 +425,8 @@
 - name: verify test create 2nd network acl rule
   assert:
     that:
-    - acl_rule|success
-    - acl_rule|changed
+    - acl_rule is successful
+    - acl_rule is changed
     - acl_rule.vpc == "{{ cs_resource_prefix }}_vpc"
     - acl_rule.network_acl == "{{ cs_resource_prefix }}_acl"
     - acl_rule.action_policy == "allow"
@@ -444,8 +453,8 @@
 - name: verify test create 2nd network acl rule idempotence
   assert:
     that:
-    - acl_rule|success
-    - not acl_rule|changed
+    - acl_rule is successful
+    - acl_rule is not changed
     - acl_rule.vpc == "{{ cs_resource_prefix }}_vpc"
     - acl_rule.network_acl == "{{ cs_resource_prefix }}_acl"
     - acl_rule.action_policy == "allow"
@@ -468,8 +477,8 @@
 - name: verify test absent network acl rule in check mode
   assert:
     that:
-    - acl_rule|success
-    - acl_rule|changed
+    - acl_rule is successful
+    - acl_rule is changed
     - acl_rule.vpc == "{{ cs_resource_prefix }}_vpc"
     - acl_rule.network_acl == "{{ cs_resource_prefix }}_acl"
     - acl_rule.start_port == 81
@@ -490,8 +499,8 @@
 - name: verify test absent network acl rule
   assert:
     that:
-    - acl_rule|success
-    - acl_rule|changed
+    - acl_rule is successful
+    - acl_rule is changed
     - acl_rule.vpc == "{{ cs_resource_prefix }}_vpc"
     - acl_rule.network_acl == "{{ cs_resource_prefix }}_acl"
     - acl_rule.start_port == 81
@@ -512,8 +521,8 @@
 - name: verify test absent network acl rule idempotence
   assert:
     that:
-    - acl_rule|success
-    - not acl_rule|changed
+    - acl_rule is successful
+    - acl_rule is not changed
 
 - name: test absent 2nd network acl rule
   cs_network_acl_rule:
@@ -526,8 +535,8 @@
 - name: verify test absent 2nd network acl rule
   assert:
     that:
-    - acl_rule|success
-    - acl_rule|changed
+    - acl_rule is successful
+    - acl_rule is changed
     - acl_rule.vpc == "{{ cs_resource_prefix }}_vpc"
     - acl_rule.network_acl == "{{ cs_resource_prefix }}_acl"
     - acl_rule.action_policy == "allow"
